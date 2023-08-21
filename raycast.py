@@ -12,7 +12,7 @@ def plotly_plot():
     camera_pos = np.array([0, 0, 0])
     camera_lookat = np.array([0, 0, -1])
     camera_up = np.array([0, 1, 0])
-    look_dir = normalize(camera_lookat - camera_pos)
+    look_dir = normalize(camera_lookat - camera_pos)# look direction
     camera_right = np.cross(look_dir, camera_up)
 
     fov = 45
