@@ -1,12 +1,33 @@
 import numpy as np
 import plotly.graph_objs as go
 
+from pyramidify import CameraPlotter, CameraMover
+
 def degree2radian(deg):
     # return deg * 3.141592659 /180.
     return deg * np.pi / 180.
 
 def normalize(x):
     return x / np.linalg.norm(x)
+
+def get_camera(fov):
+    points = [[ 0,  1,  1, -1, -1], # pyramid verticies # towards -z
+            [ 0,  1, -1, -1,  1],
+            [ 0,  -1,  -1,  -1,  -1]]
+    lines = [[1, 2], [2, 3], [3, 4], [4, 1], # pyramid lines
+            [0, 1], [0, 2], [0, 3], [0, 4]]
+    # camera_size = 0.4
+    # カメラからスクリーンまでの距離
+    dist_camera2plane = 1. / (2. * np.tan(degree2radian(fov) * 0.5))
+    camera = np.array(points) * dist_camera2plane# camera_size
+    width_half = np.tan(degree2radian(fov) * 0.5)
+    camera[0, :] *= width_half# x
+    camera[1, :] *= width_half# y
+    # print("camera: ", camera)
+    print("width_half: ", width_half)
+
+    return camera, points, lines
+
 
 def plotly_plot():
     camera_pos = np.array([0, 0, 0])
@@ -15,7 +36,7 @@ def plotly_plot():
     look_dir = normalize(camera_lookat - camera_pos)# look direction
     camera_right = np.cross(look_dir, camera_up)
 
-    fov = 45
+    fov = 20#80#45
 
     # カメラからスクリーンまでの距離
     dist_camera2plane = 1. / (2. * np.tan(degree2radian(fov) * 0.5))
@@ -23,6 +44,8 @@ def plotly_plot():
     print("radian: ", degree2radian(fov))
     print(dist_camera2plane)
     print(look_dir*dist_camera2plane)
+
+    camera, points, lines = get_camera(fov)
 
     
 
@@ -159,6 +182,22 @@ def plotly_plot():
     data = go.Data([trace1, trace2, trace3, trace4, trace5, trace6])
     # fig = Figure(data=data, layout=layout)
     fig = go.Figure(data=data)
+
+    color='blue'
+    name='camera-plane'
+    for i, j in lines:
+        x, y, z = [[axis[i], axis[j]] for axis in camera]
+        trace = go.Scatter3d(x=x, y=y, z=z, mode='lines', line_width=2, line_color=color, name=name)
+        fig.add_trace(trace)
+    x, y, z = camera[:, 1:]
+    mesh = go.Mesh3d(x=x, y=y, z=z, opacity=0.5, color=color, name=name)
+    fig.add_trace(mesh)
+    fig.update_layout(showlegend=False)
+
+    # x, y, z = camera[:, 1:]
+    # mesh = go.Mesh3d(x=x, y=y, z=z, opacity=0.5, color=color, name=name)
+    # fig.add_trace(mesh)
+
 
 
     # fig.update_layout(scene=dict(aspectratio=dict(x=1, y=1, z=1),
