@@ -33,9 +33,10 @@ def debug_plot():
 
 if __name__=="__main__":
     # debug_plot()
-    transforms = {'camera_angle_x':0.01,'camera_angle_y':0.01} 
-    plotter = CameraPlotter(transforms)
+    # transforms = {'camera_angle_x':0.01,'camera_angle_y':0.01} 
+    transforms = {'camera_angle_x':0.1,'camera_angle_y':0.1} 
+    plotter = CameraPlotter(transforms, camera_size=0.1)
 
     mover = CameraMover()
-    plotter.add_camera(mover.M_ext.copy(), color='blue', name='camera')
+    plotter.add_camera(mover.M_ext.copy(), color='blue', name='camera-0')
     plotter.plot_cameras()
