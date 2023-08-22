@@ -10,9 +10,13 @@ def degree2radian(deg):
 def normalize(x):
     return x / np.linalg.norm(x)
 
-def get_camera(fov):
-    points = [[ 0,  1,  1, -1, -1], # pyramid verticies # towards -z
-            [ 0,  1, -1, -1,  1],
+# def get_camera(fov):
+def get_camera(fov, width, height):
+    # points = [[ 0,  1,  1, -1, -1], # pyramid verticies # towards -z
+    #         [ 0,  1, -1, -1,  1],
+    #         [ 0,  -1,  -1,  -1,  -1]]
+    points = [[ 0,  width,  width, -width, -width], # pyramid verticies # towards -z
+            [ 0,  height, -height, -height, height],
             [ 0,  -1,  -1,  -1,  -1]]
     lines = [[1, 2], [2, 3], [3, 4], [4, 1], # pyramid lines
             [0, 1], [0, 2], [0, 3], [0, 4]]
@@ -20,13 +24,35 @@ def get_camera(fov):
     # カメラからスクリーンまでの距離
     dist_camera2plane = 1. / (2. * np.tan(degree2radian(fov) * 0.5))
     camera = np.array(points) * dist_camera2plane# camera_size
+    # camera = np.array(points)
+    # camera[2,:] = camera[2,:] * dist_camera2plane# camera_size
     width_half = np.tan(degree2radian(fov) * 0.5)
-    camera[0, :] *= width_half# x
-    camera[1, :] *= width_half# y
+    camera[0, :] *= width_half# x, w/2
+    camera[1, :] *= width_half# y, w/2
     # print("camera: ", camera)
     print("width_half: ", width_half)
 
     return camera, points, lines
+
+def raycast(w_, h_, dist_camera2plane, look_dir, camera_right, camera_up):
+    cx = (float)(w_ / 2)
+    cy = (float)(h_ / 2)
+
+    ray_dirs = []
+    for px in range(w_):
+        for py in range(h_):
+            # https://github.com/Rintarooo/Volume-Rendering-Tutorial/blob/f27c64f7909f368dc8205adcef2efa24b40e1e29/Tutorial1/src/VolumeRenderer.cpp#L72-L75
+            # Compute the ray direction for this pixel. Same as in standard ray tracing.
+            # u_ = -.5 + (px + .5) / (float)(w_-1)
+            # v_ =  .5 - (py + .5) / (float)(h_-1)
+
+            u_ = (px + .5) - cx
+            v_ = (py + .5) - cy
+            # print("u_, v_: ", u_, v_)
+            ray_dir = look_dir * dist_camera2plane + u_ * camera_right + v_ * camera_up
+            ray_dirs.append(ray_dir)
+    return ray_dirs
+
 
 
 def plotly_plot():
@@ -40,14 +66,15 @@ def plotly_plot():
 
     # カメラからスクリーンまでの距離
     dist_camera2plane = 1. / (2. * np.tan(degree2radian(fov) * 0.5))
-    print("degree: ", fov)
-    print("radian: ", degree2radian(fov))
+    # print("degree: ", fov)
+    # print("radian: ", degree2radian(fov))
     print(dist_camera2plane)
     print(look_dir*dist_camera2plane)
 
-    camera, points, lines = get_camera(fov)
-
-    
+    width, height = 3, 3
+    camera, points, lines = get_camera(fov, width, height)
+    ray_dirs = raycast(width, height, dist_camera2plane, look_dir, camera_right, camera_up)
+    # print(ray_dirs)
 
     # fig = go.Figure(data = go.Cone(
     #     x=camera_pos_x,  # 矢印の始点のx座標
@@ -179,7 +206,80 @@ def plotly_plot():
         "autocolorscale": False
     }
 
-    data = go.Data([trace1, trace2, trace3, trace4, trace5, trace6])
+    # ray cast
+    min_t = 2.0
+    max_t = 3.0
+    ray_dir_0 = camera_pos + (max_t+1.0) * ray_dirs[-1]
+    # ray_dir_0_all = [camera_pos + t_ * ray_dirs[-1] for _ in range()]
+    ray_dir_0_sample = []
+    num_point = 20
+    dt = (max_t-min_t)/num_point
+    # ray_dir_0_sample = [list(camera_pos + (min_t + dt*t) * ray_dirs[-1]) for t in range(num_point)]
+    ray_dir_0_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[-1] for t in range(num_point)])
+    # for i in range(t_):
+    #     ray_dirs
+    trace7 = {
+        "line": {"width": 3}, 
+        "mode": "lines", 
+        "name": "ray_dir_0", 
+        "type": "scatter3d", 
+        "x": [camera_pos[0], ray_dir_0[0]], 
+        "y": [camera_pos[1], ray_dir_0[1]], 
+        "z": [camera_pos[2], ray_dir_0[2]], 
+        "marker": {"color": "rgb(255, 217, 0)"}, 
+        # "marker": {"line": {"color": "rgb(35, 155, 118)"}}, 
+        "showlegend": False
+    }
+    trace8 = {
+        "name": "ray_dir_0", 
+        "type": "cone", 
+        "u": [ray_dir_0[0]-camera_pos[0]], # 矢印の終点のx座標
+        "v": [ray_dir_0[1]-camera_pos[1]], 
+        "w": [ray_dir_0[2]-camera_pos[2]], 
+        "x": [ray_dir_0[0]], # 矢印の始点のx座標
+        "y": [ray_dir_0[1]], 
+        "z": [ray_dir_0[2]], 
+        "sizeref": 0.1, 
+        "lighting": {"ambient": 0.8}, 
+        "sizemode": "scaled", 
+        "hoverinfo": "x+y+z+name", 
+        "colorscale": [[0.0, 'rgb(255,217,0)'],[1.0, 'rgb(255,217,0)']],
+        "showscale": False, 
+        "autocolorscale": False
+    }
+
+    # print(ray_dir_0_sample[0,:])
+    # print(ray_dir_0_sample)
+    # print(ray_dir_0_sample[:,0])
+    trace9 = {
+        "name": "sampling_point", 
+        "type": "scatter3d", 
+        # "x": [ray_dir_0_sample[0]], # 矢印の始点のx座標
+        # "y": [ray_dir_0_sample[1]], 
+        # "z": [ray_dir_0_sample[2]], 
+        "x": ray_dir_0_sample[:,0], # 矢印の始点のx座標
+        "y": ray_dir_0_sample[:,1], 
+        "z": ray_dir_0_sample[:,2], 
+        # "sizeref": 0.1, 
+        # "lighting": {"ambient": 0.8}, 
+        # "sizemode": "scaled", 
+        # "hoverinfo": "x+y+z+name", 
+        # "colorscale": [[0.0, 'rgb(0,0,0)'],[1.0, 'rgb(0,0,0)']],
+        # "showscale": False, 
+        # "autocolorscale": False
+        "mode": 'markers',
+        "marker": {
+            "size": 4,
+            "color": 'rgb(0,0,0)',
+            "colorscale": 'Viridis',
+            "opacity": 0.2
+        }
+    }
+
+    # data = go.Data([trace1, trace2, trace3, trace4, trace5, trace6])
+    # data = go.Data([trace1, trace2, trace3, trace4, trace5, trace6, trace7, trace8])
+    data = go.Data([trace1, trace2, trace3, trace4, trace5, trace6, trace7, trace8, trace9])
+
     # fig = Figure(data=data, layout=layout)
     fig = go.Figure(data=data)
 
