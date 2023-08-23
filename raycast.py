@@ -15,24 +15,39 @@ def get_camera(fov, width, height):
     # points = [[ 0,  1,  1, -1, -1], # pyramid verticies # towards -z
     #         [ 0,  1, -1, -1,  1],
     #         [ 0,  -1,  -1,  -1,  -1]]
-    points = [[ 0,  width,  width, -width, -width], # pyramid verticies # towards -z
-            [ 0,  height, -height, -height, height],
-            [ 0,  -1,  -1,  -1,  -1]]
+    # points = [[ 0,  width,  width, -width, -width], # pyramid verticies # towards -z
+    #         [ 0,  height, -height, -height, height],
+    #         [ 0,  -1.0,  -1.0,  -1.0,  -1.0]]
+    points = [[ 0,  width/2,  width/2, -width/2, -width/2], # pyramid verticies # towards -z
+            [ 0,  height/2, -height/2, -height/2, height/2],
+            [ 0,  -1.0,  -1.0,  -1.0,  -1.0]]    # points = [[ 0,  1.,1.,-1.,-1.], # pyramid verticies # towards -z
+    #         [ 0,  1.,-1.,-1.,1.],
+    #         [ 0,  -1.0,  -1.0,  -1.0,  -1.0]]
     lines = [[1, 2], [2, 3], [3, 4], [4, 1], # pyramid lines
             [0, 1], [0, 2], [0, 3], [0, 4]]
     # camera_size = 0.4
     # カメラからスクリーンまでの距離
-    dist_camera2plane = 1. / (2. * np.tan(degree2radian(fov) * 0.5))
-    camera = np.array(points) * dist_camera2plane# camera_size
-    # camera = np.array(points)
-    # camera[2,:] = camera[2,:] * dist_camera2plane# camera_size
-    width_half = np.tan(degree2radian(fov) * 0.5)
-    camera[0, :] *= width_half# x, w/2
-    camera[1, :] *= width_half# y, w/2
-    # print("camera: ", camera)
-    print("width_half: ", width_half)
+    # dist_camera2plane = 1. / (2. * np.tan(degree2radian(fov) * 0.5))
+    dist_camera2plane = width / (2. * np.tan(degree2radian(fov) * 0.5))
+    # print(np.array(points)[0,:])
+    # camera = np.array(points) * dist_camera2plane# camera_size
+    camera = np.array(points)
+    # # print(camera[0,:])
+    camera[2,:] *= dist_camera2plane# camera_size
 
-    return camera, points, lines
+    # print(camera[0,:])
+    # width_half = np.tan(degree2radian(fov) * 0.5)
+    # camera[0, :] *= width_half# x, w/2
+    # camera[1, :] *= width_half# y, w/2
+
+    # camera[0, :] = width_half# x, w/2
+    # camera[1, :] = width_half# y, w/2
+
+    # print(camera[0,:])
+    # # print("camera: ", camera)
+    # print("width_half: ", width_half)
+
+    return camera, points, lines, dist_camera2plane
 
 def raycast(w_, h_, dist_camera2plane, look_dir, camera_right, camera_up):
     cx = (float)(w_ / 2)
@@ -62,18 +77,22 @@ def plotly_plot():
     look_dir = normalize(camera_lookat - camera_pos)# look direction
     camera_right = np.cross(look_dir, camera_up)
 
-    fov = 20#80#45
+    fov = 20#90#150#45#20#85#10#20#80#45
 
     # カメラからスクリーンまでの距離
-    dist_camera2plane = 1. / (2. * np.tan(degree2radian(fov) * 0.5))
+    # dist_camera2plane = 1. / (2. * np.tan(degree2radian(fov) * 0.5))
     # print("degree: ", fov)
     # print("radian: ", degree2radian(fov))
-    print(dist_camera2plane)
-    print(look_dir*dist_camera2plane)
 
-    width, height = 3, 3
-    camera, points, lines = get_camera(fov, width, height)
+    # print("dist_camera2plane: ", dist_camera2plane)
+    # print(look_dir*dist_camera2plane)
+
+    width, height = 5,5#3, 3#1,1#5,5#3, 3
+    # camera, points, lines = get_camera(fov, width, height)
+    camera, points, lines, dist_camera2plane = get_camera(fov, width, height)
+
     ray_dirs = raycast(width, height, dist_camera2plane, look_dir, camera_right, camera_up)
+    
     # print(ray_dirs)
 
     # fig = go.Figure(data = go.Cone(
