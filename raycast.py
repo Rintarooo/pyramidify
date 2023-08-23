@@ -53,6 +53,7 @@ def raycast(w_, h_, dist_camera2plane, look_dir, camera_right, camera_up):
     cx = (float)(w_ / 2)
     cy = (float)(h_ / 2)
 
+    pxl_boarders_x, pxl_boarders_y = [], []
     ray_dirs = []
     for px in range(w_):
         for py in range(h_):
@@ -63,10 +64,15 @@ def raycast(w_, h_, dist_camera2plane, look_dir, camera_right, camera_up):
 
             u_ = (px + .5) - cx
             v_ = (py + .5) - cy
+            # pxl_boarders_x.append(px-cx)
+            # pxl_boarders_y.append(py-cy)
             # print("u_, v_: ", u_, v_)
             ray_dir = look_dir * dist_camera2plane + u_ * camera_right + v_ * camera_up
             ray_dirs.append(ray_dir)
-    return ray_dirs
+    # print(pxl_boarders_x, pxl_boarders_y)
+    # grid = np.mgrid[-w_/2:w_/2:1.0, -w_/2:w_/2:1.0]
+    # print("grid: ", grid)
+    return ray_dirs, pxl_boarders_x, pxl_boarders_y
 
 
 
@@ -77,7 +83,7 @@ def plotly_plot():
     look_dir = normalize(camera_lookat - camera_pos)# look direction
     camera_right = np.cross(look_dir, camera_up)
 
-    fov = 20#90#150#45#20#85#10#20#80#45
+    fov = 120#90#150#45#20#85#10#20#80#45
 
     # カメラからスクリーンまでの距離
     # dist_camera2plane = 1. / (2. * np.tan(degree2radian(fov) * 0.5))
@@ -87,11 +93,11 @@ def plotly_plot():
     # print("dist_camera2plane: ", dist_camera2plane)
     # print(look_dir*dist_camera2plane)
 
-    width, height = 5,5#3, 3#1,1#5,5#3, 3
+    width, height = 5,5#3,3#5,5#3, 3#1,1#5,5#3, 3
     # camera, points, lines = get_camera(fov, width, height)
     camera, points, lines, dist_camera2plane = get_camera(fov, width, height)
 
-    ray_dirs = raycast(width, height, dist_camera2plane, look_dir, camera_right, camera_up)
+    ray_dirs, pxl_boarders_x, pxl_boarders_y = raycast(width, height, dist_camera2plane, look_dir, camera_right, camera_up)
     
     # print(ray_dirs)
 
@@ -304,12 +310,38 @@ def plotly_plot():
 
     color='blue'
     name='camera-plane'
+    # square draw
     for i, j in lines:
         x, y, z = [[axis[i], axis[j]] for axis in camera]
         trace = go.Scatter3d(x=x, y=y, z=z, mode='lines', line_width=2, line_color=color, name=name)
         fig.add_trace(trace)
+    # boarder in square draw
+    # for i in range(len(pxl_boarders_x)):
+    #     x, y, z = [[pxl_boarders_x[i], pxl_boarders_y[j]] for axis in camera]
+    # trace_boarder = go.Scatter3d(x=pxl_boarders_x, y=pxl_boarders_y, z=[camera[-1][-1] for _ in range(len(pxl_boarders_x))], mode='lines', line_width=2, line_color=color, name="pixel")
+    # grid = np.mgrid[-width/2:(width/2)+0.01:1.0, -width/2:(width/2)+0.01:1.0]
+    # print("grid: ", grid)
+    # print("grid[0]: ", grid[0])
+    # print("grid[1]: ", grid[1])
+    # print(grid.shape)
+    # print([0.1 for _ in range(grid.shape[1]))])
+    # trace_boarder = go.Scatter3d(x=grid[0], y=grid[1], z=[camera[-1][-1] for _ in range(len(grid[0]))], mode='markers+lines', line_width=2, line_color=color, name="pixel")
+    # trace_boarder = go.Scatter3d(x=grid[0], y=grid[1], z=[0.1 for _ in range(len(grid[0]))], mode='markers', line_width=2, line_color=color, name="pixel")
+    # 2次元グリッドの座標を定義
+    # x = [-width/2 + d for d in range(int(width/2))]#[-1.5, 0, 1.5]
+    # y = [-width/2 + d for d in range(int(width/2))]#[-1.5, 0, 1.5]
+    x = [-width/2 + d for d in range(width+1)]#[-1.5, -0.5, 0.5, 1.5]
+    y = [-height/2 + d for d in range(height+1)]#[-1.5, -0.5, 0.5, 1.5]
+    # print(x, y)
+    for i in range(width+1):
+        for j in range(height+1):
+            trace_gridx = go.Scatter3d(x=[x[j]]*(width+1), y=y, z=[camera[-1][-1] for _ in range(width+1)], mode='lines', line_width=2, line_color=color, name="pixel")
+            fig.add_trace(trace_gridx)
+            trace_gridy = go.Scatter3d(x=x, y=[y[i]]*(height+1), z=[camera[-1][-1] for _ in range(height+1)], mode='lines', line_width=2, line_color=color, name="pixel")
+            fig.add_trace(trace_gridy)
+    # fig.add_trace(trace_boarder)
     x, y, z = camera[:, 1:]
-    mesh = go.Mesh3d(x=x, y=y, z=z, opacity=0.5, color=color, name=name)
+    mesh = go.Mesh3d(x=x, y=y, z=z, opacity=0.3, color=color, name=name)
     fig.add_trace(mesh)
     fig.update_layout(showlegend=False)
 
