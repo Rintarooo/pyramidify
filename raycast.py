@@ -83,7 +83,7 @@ def plotly_plot():
     look_dir = normalize(camera_lookat - camera_pos)# look direction
     camera_right = np.cross(look_dir, camera_up)
 
-    fov = 120#90#150#45#20#85#10#20#80#45
+    fov = 30#120#90#150#45#20#85#10#20#80#45
 
     # カメラからスクリーンまでの距離
     # dist_camera2plane = 1. / (2. * np.tan(degree2radian(fov) * 0.5))
@@ -93,7 +93,7 @@ def plotly_plot():
     # print("dist_camera2plane: ", dist_camera2plane)
     # print(look_dir*dist_camera2plane)
 
-    width, height = 5,5#3,3#5,5#3, 3#1,1#5,5#3, 3
+    width, height = 3,3#5,5#3, 3#1,1#5,5#3, 3
     # camera, points, lines = get_camera(fov, width, height)
     camera, points, lines, dist_camera2plane = get_camera(fov, width, height)
 

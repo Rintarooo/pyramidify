@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # pyenvのバージョン
-pyenv --version
+# pyenv --version
+pyenv -v
 # pyenvでインストールしたpythonのバージョン
 pyenv versions
 # pyenv install --list | grep -i "3.9."

@@ -45,3 +45,8 @@ Here's a guide for using NVIDIA NGP without their GUI (using a Colab GPU):
 * Upload images, transforms.json and base_cam.json.
 * You should get something like this:
 <img src="images/room.gif" height="342" width="342"/>
+
+## Usage
+```bash
+poetry run python raycast.py
+```
