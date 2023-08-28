@@ -55,25 +55,56 @@ def raycast(w_, h_, dist_camera2plane, look_dir, camera_right, camera_up):
 
     pxl_boarders_x, pxl_boarders_y = [], []
     ray_dirs = []
-    for px in range(w_):
-        for py in range(h_):
-            # https://github.com/Rintarooo/Volume-Rendering-Tutorial/blob/f27c64f7909f368dc8205adcef2efa24b40e1e29/Tutorial1/src/VolumeRenderer.cpp#L72-L75
-            # Compute the ray direction for this pixel. Same as in standard ray tracing.
-            # u_ = -.5 + (px + .5) / (float)(w_-1)
-            # v_ =  .5 - (py + .5) / (float)(h_-1)
 
-            u_ = (px + .5) - cx
-            v_ = (py + .5) - cy
-            # pxl_boarders_x.append(px-cx)
-            # pxl_boarders_y.append(py-cy)
-            # print("u_, v_: ", u_, v_)
-            ray_dir = look_dir * dist_camera2plane + u_ * camera_right + v_ * camera_up
-            ray_dirs.append(ray_dir)
-    # print(pxl_boarders_x, pxl_boarders_y)
-    # grid = np.mgrid[-w_/2:w_/2:1.0, -w_/2:w_/2:1.0]
-    # print("grid: ", grid)
-    return ray_dirs, pxl_boarders_x, pxl_boarders_y
+    # for px in range(w_):
+    #     for py in range(h_):
+    #         # https://github.com/Rintarooo/Volume-Rendering-Tutorial/blob/f27c64f7909f368dc8205adcef2efa24b40e1e29/Tutorial1/src/VolumeRenderer.cpp#L72-L75
+    #         # Compute the ray direction for this pixel. Same as in standard ray tracing.
+    #         # u_ = -.5 + (px + .5) / (float)(w_-1)
+    #         # v_ =  .5 - (py + .5) / (float)(h_-1)
 
+    #         u_ = (px + .5) - cx
+    #         v_ = (py + .5) - cy
+    #         # pxl_boarders_x.append(px-cx)
+    #         # pxl_boarders_y.append(py-cy)
+    #         # print("u_, v_: ", u_, v_)
+    #         ray_dir = look_dir * dist_camera2plane + u_ * camera_right + v_ * camera_up
+    #         ray_dirs.append(look_dir * dist_camera2plane + u_ * camera_right + v_ * camera_up)
+    # # print(pxl_boarders_x, pxl_boarders_y)
+    # # grid = np.mgrid[-w_/2:w_/2:1.0, -w_/2:w_/2:1.0]
+    # # print("grid: ", grid)
+
+    # print("ray_dirs: ", ray_dirs)
+
+    v_grid, u_grid = np.mgrid[:h_, :w_]
+    # print("u_grid: ", u_grid)
+    # print("v_grid: ", v_grid)
+    
+    offset = 0.5
+    x_grid = (u_grid - cx + offset) / dist_camera2plane# f
+    y_grid = (v_grid - cy + offset) / dist_camera2plane
+    # print("x_grid: ", x_grid)
+    # print("y_grid: ", y_grid)
+
+    z_1 = np.ones_like(x_grid)
+    z_nega_1 = - z_1
+    ray_dir_np = np.stack([x_grid, y_grid, z_nega_1], axis = 2)
+    # ray_dir_np =  np.array(ray_dir_tmp*dist_camera2plane)
+    print("ray_dirs_np: ", ray_dir_np)
+    print("ray_dirs_np: ", ray_dir_np.shape)
+    # print(ray_dir_np[0])
+
+            #     o (ndarray, [height, width, 3]): The origin of the camera coordinate.
+        # d (ndarray, [height, width, 3]): The direction of each ray.
+
+    # ray_dirs.append(ray_dir*dist_camera2plane)
+    # print("ray_dirs: ", ray_dir)
+    for i in range(w_):
+        for j in range(h_):
+            ray_dirs.append(ray_dir_np[i][j])
+    print("ray_dirs: ", ray_dirs)
+
+    return ray_dirs
 
 
 def plotly_plot():
@@ -97,7 +128,7 @@ def plotly_plot():
     # camera, points, lines = get_camera(fov, width, height)
     camera, points, lines, dist_camera2plane = get_camera(fov, width, height)
 
-    ray_dirs, pxl_boarders_x, pxl_boarders_y = raycast(width, height, dist_camera2plane, look_dir, camera_right, camera_up)
+    ray_dirs = raycast(width, height, dist_camera2plane, look_dir, camera_right, camera_up)
     
     # print(ray_dirs)
 
@@ -232,8 +263,8 @@ def plotly_plot():
     }
 
     # ray cast
-    min_t = 2.0
-    max_t = 3.0
+    min_t = dist_camera2plane + 0.5
+    max_t = min_t + 1.0
     ray_dir_0 = camera_pos + (max_t+1.0) * ray_dirs[-1]
     # ray_dir_0_all = [camera_pos + t_ * ray_dirs[-1] for _ in range()]
     ray_dir_0_sample = []

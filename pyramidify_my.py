@@ -10,7 +10,7 @@ def normalize(x):
 
 class CameraPlotter:
 
-    def __init__(self, transforms, width, height, fov, plot_scale = 0.1):
+    def __init__(self, transforms, width, height, fov, plot_scale = 0.1, use_transforms_json = True):
         # `camera["camera_angle_x"]`はカメラのx軸に対する視野角を、
         # `camera["camera_angle_y"]`はカメラのy軸に対する視野角を表しています。
         # fov, represented by radian, not degree.
@@ -22,6 +22,13 @@ class CameraPlotter:
                        [ y_origin,  1, -1, -1,  1],
                        [ z_origin,  1,  1,  1,  1]]
         """
+        if use_transforms_json:
+            width = int(transforms['w'])
+            height = int(transforms['h'])
+
+        self.width = width
+        self.height = height
+
 
         # self.points = [[ 0,  1,  1, -1, -1], # pyramid verticies
         #                [ 0,  1, -1, -1,  1],
@@ -39,12 +46,20 @@ class CameraPlotter:
                       [0, 1], [0, 2], [0, 3], [0, 4]]
         self.camera_list = []
 
+
         # カメラからスクリーンまでの距離
         self.fl_x = width / (2. * np.tan(degree2radian(fov) * 0.5))
         self.fl_y = height / (2. * np.tan(degree2radian(fov) * 0.5))
-
         self.cx = (float)(width / 2)
         self.cy = (float)(height / 2)
+        
+        # カメラからスクリーンまでの距離
+        if use_transforms_json:
+            self.fl_x = transforms["fl_x"]
+            self.fl_y = transforms["fl_y"]
+            self.cx = transforms["cx"]
+            self.cy = transforms["cy"]
+            
         self.ray_dirs_list = []
 
 
@@ -58,6 +73,8 @@ class CameraPlotter:
         self.camera_up_world_list = []
         self.camera_lookat_world_list = []
         self.camera_right_world_list = []
+
+        self.ray_dirs_world_list = []
 
         # self.camera_origin = [0,0,0]
         # self.camera_look = [0,0,1]
@@ -86,7 +103,7 @@ class CameraPlotter:
         # camera[1, :] *= np.tan(self.ca_y/2)
 
         camera = np.array(self.points)
-        camera *= self.plot_scale
+        # camera *= self.plot_scale
         # # print(camera[0,:])
         camera[2,:] *= self.fl_x
 
@@ -151,34 +168,53 @@ class CameraPlotter:
         self.fig.update_layout(showlegend=False)
         self.fig.show()
     
-    # def raycast(self):
-    #     for px in range(w_):
-    #         for py in range(h_):
-    #             # https://github.com/Rintarooo/Volume-Rendering-Tutorial/blob/f27c64f7909f368dc8205adcef2efa24b40e1e29/Tutorial1/src/VolumeRenderer.cpp#L72-L75
-    #             # Compute the ray direction for this pixel. Same as in standard ray tracing.
-    #             # u_ = -.5 + (px + .5) / (float)(w_-1)
-    #             # v_ =  .5 - (py + .5) / (float)(h_-1)
+    def get_rays(self):
+        v_grid, u_grid = np.mgrid[:self.height, :self.width]
+        # print("u_grid: ", u_grid)
+        # print("v_grid: ", v_grid)
+        
+        offset = 0.5
+        x_grid = (u_grid - self.cx + offset) / self.fl_x
+        y_grid = (v_grid - self.cy + offset) / self.fl_y
+        # print("x_grid: ", x_grid)
+        # print("y_grid: ", y_grid)
 
-    #             u_ = (px + .5) - cx
-    #             v_ = (py + .5) - cy
-    #             # pxl_boarders_x.append(px-cx)
-    #             # pxl_boarders_y.append(py-cy)
-    #             # print("u_, v_: ", u_, v_)
-    #             ray_dir = look_dir * self.fl_x + u_ * camera_right + v_ * camera_up
-    #             self.ray_dirs.append(ray_dir)
-    #             # return ray_dirs
+        z_1 = np.ones_like(x_grid)
+        ray_dir_np = np.stack([x_grid, y_grid, z_1], axis = 2)
 
-    # def add_rays(self, M_ext, color, name):
+        # ray_dirs.append(ray_dir*dist_camera2plane)
+        # print(ray_dir_np.shape)
+        ray_dirs = []
+        for i in range(self.height):
+            for j in range(self.width):
+                ray_dirs.append(ray_dir_np[i][j])
+        # print("ray_dirs: ", ray_dirs)
+        return ray_dirs
+                
+
+    def add_rays(self, M_ext):
+        ray_dirs_camera = self.get_rays()
+        R = M_ext[:3, :3] # rotation matrix
+        t = M_ext[:3, 3] # translation vector
+
+        ray_dirs_world = []
+        # for i in range(self.width):
+        #     for j in range(self.height):
+        each_ray = np.array(ray_dirs_camera)#[i][j]
+        # print(each_ray)
+        # print(each_ray.shape)# (9, 3) # [[x0,y0,z0],
+                                        #  [x1,y1,z1]]
+        ray_dir_world = -((R @ each_ray.T).T - t).T
+        # print(ray_dir_world.T.shape)
+
+        # ray_dirs_world.append(ray_dir_world)
+        # self.ray_dirs_world_list.append(ray_dirs_world)
+        self.ray_dirs_world_list.append(ray_dir_world.T)
+        # print(self.ray_dirs_world_list)
 
     def add_camera_coord(self, M_ext):
         R = M_ext[:3, :3] # rotation matrix
         t = M_ext[:3, 3] # translation vector
-
-        # self.camera_pos = np.array([0, 0, 0])
-        # self.camera_lookat = np.array([0, 0, 1])
-        # self.camera_up = np.array([0, 1, 0])
-        # self.look_dir = normalize(self.camera_lookat - self.camera_pos)# look direction
-        # self.camera_right = np.cross(self.look_dir, self.camera_up)
 
         camera_pos = -((R @ self.camera_pos).T - t).T
         camera_lookat = -((R @ self.camera_lookat).T - t).T
@@ -189,7 +225,7 @@ class CameraPlotter:
         self.camera_lookat_world_list.append(camera_lookat)
         self.camera_right_world_list.append(camera_right)
 
-    def plot_camera_coords(self, plot_scale=0.1):
+    def plot_camera_coords(self):
         for i in range(len(self.camera_pos_world_list)):
             camera_pos = self.camera_pos_world_list[i]
             camera_up = self.camera_up_world_list[i]
@@ -288,7 +324,72 @@ class CameraPlotter:
             }
             self.fig.add_traces([trace1, trace2, trace3, trace4, trace5, trace6])
             # self.fig.add_traces
-    
+
+    def plot_camera_rays(self, plot_scale=1.0):
+        for i in range(len(self.ray_dirs_world_list)):
+            camera_pos = self.camera_pos_world_list[i]
+            camera_rays = self.ray_dirs_world_list[i]
+            # print(camera_rays)
+            ray_index = int(self.width*self.height/2)#this is center of image#4#0
+            camera_ray = normalize(camera_rays[ray_index] - camera_pos)
+            # print("before: ", camera_rays[0] - camera_pos)
+            # print("normalized: ", camera_ray)
+            # camera_ray = camera_rays[0] - camera_pos
+            # print(self.fl_x)
+            min_t = self.fl_x + 500
+            max_t = min_t + 0.2
+            ray_dir_0 = camera_pos + (max_t+1.0) * camera_ray
+            # ray_dir_0 = camera_pos + camera_ray
+
+            num_point = 5
+            dt = (max_t-min_t)/num_point
+            ray_dir_0_sample = np.array([camera_pos + (min_t + dt*t) * camera_ray for t in range(num_point)])
+
+            trace1 = {
+                "line": {"width": 3}, 
+                "mode": "lines", 
+                "name": f"ray_dir_{i}", 
+                "type": "scatter3d", 
+                "x": [camera_pos[0], ray_dir_0[0]], 
+                "y": [camera_pos[1], ray_dir_0[1]], 
+                "z": [camera_pos[2], ray_dir_0[2]], 
+                "marker": {"color": "rgb(255, 217, 0)"}, 
+                # "marker": {"line": {"color": "rgb(35, 155, 118)"}}, 
+                "showlegend": False
+            }
+            trace2 = {
+                "name": f"ray_dir_{i}", 
+                "type": "cone", 
+                "u": [ray_dir_0[0]-camera_pos[0]], # 矢印の終点のx座標
+                "v": [ray_dir_0[1]-camera_pos[1]], 
+                "w": [ray_dir_0[2]-camera_pos[2]], 
+                "x": [ray_dir_0[0]], # 矢印の始点のx座標
+                "y": [ray_dir_0[1]], 
+                "z": [ray_dir_0[2]], 
+                "sizeref": 0.01, 
+                "lighting": {"ambient": 0.8}, 
+                "sizemode": "scaled", 
+                "hoverinfo": "x+y+z+name", 
+                "colorscale": [[0.0, 'rgb(255,217,0)'],[1.0, 'rgb(255,217,0)']],
+                "showscale": False, 
+                "autocolorscale": False
+            }
+            trace3 = {
+                "name": "sampling_point", 
+                "type": "scatter3d", 
+                "x": ray_dir_0_sample[:,0], # 矢印の始点のx座標
+                "y": ray_dir_0_sample[:,1], 
+                "z": ray_dir_0_sample[:,2], 
+                "mode": 'markers',
+                "marker": {
+                    "size": 4,
+                    "color": 'rgb(0,0,0)',
+                    "colorscale": 'Viridis',
+                    "opacity": 0.2
+                }
+            }
+            
+            self.fig.add_traces([trace1, trace2, trace3])
 
 
 class CameraMover:
