@@ -33,10 +33,18 @@ def debug_plot():
 
 if __name__=="__main__":
     # debug_plot()
+    w = 3
+    print(2./w)
+    delta = 10**-5
+    lis = np.arange(-1., 1.+delta, 2./w, dtype = float)
+    print(lis)
+    # for i in range(-1., 1., 1./w):
+        # print(i)
+
     # transforms = {'camera_angle_x':0.01,'camera_angle_y':0.01} 
     transforms = {'camera_angle_x':0.1,'camera_angle_y':0.1} 
     plotter = CameraPlotter(transforms, camera_size=0.1)
 
     mover = CameraMover()
-    plotter.add_camera(mover.M_ext.copy(), color='blue', name='camera-0')
-    plotter.plot_cameras()
+    # plotter.add_camera(mover.M_ext.copy(), color='blue', name='camera-0')
+    # plotter.plot_cameras()
