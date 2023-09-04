@@ -155,14 +155,42 @@ class CameraPlotter:
     #     fig.update_layout(showlegend=False)
     #     fig.show()
 
-    def plot_cameras(self):
+    def plot_screen(self, scale_plot_screen):
         # fig = go.Figure()
         for n, (camera, color, name) in enumerate(self.camera_list):
+            # print("camera.shape: ", camera.shape)
+            # print("camera: ", camera)
+            # for k in range(5):
+            #     print(camera[:,k])
+            # for k in range(4):
+            for k in range(1, 5):# camera position (0th col in camera array) is fixed
+                # print(camera[:,k])
+                camera[:,k] = [e * scale_plot_screen for e in camera[:,k]]
+            # print("camera(after): ", camera)
+            # for k in range(5):
+            #     print(camera[:,k])
             for i, j in self.lines:
                 x, y, z = [[axis[i], axis[j]] for axis in camera]
+                # print(f"x: {x}, y: {y}")
+                # for v in [x, y, z]:
+                #     v = [e * scale_plot_screen for e in v]
+                # if i != 0 and j != 0:
+                #     print(i, j)
+                #     x = [e * scale_plot_screen for e in x]
+                #     y = [e * scale_plot_screen for e in y]
+                #     z = [e * scale_plot_screen for e in z]
+                    # print(" after x: ", x)
+                # x, y, z = [elem * scale_plot_screen for elem in [x, y, z]]
                 trace = go.Scatter3d(x=x, y=y, z=z, mode='lines', line_width=2, line_color=color, name=name)
                 self.fig.add_trace(trace)
             x, y, z = camera[:, 1:]
+            # for v in [x, y, z]:
+            #     v = [e * scale_plot_screen for e in v]
+            # x = [e * scale_plot_screen for e in x]
+            # y = [e * scale_plot_screen for e in y]
+            # z = [e * scale_plot_screen for e in z]
+
+            # x, y, z = [elem * scale_plot_screen for elem in [x, y, z]]
             mesh = go.Mesh3d(x=x, y=y, z=z, opacity=0.3, color=color, name=name)
             self.fig.add_trace(mesh)
         self.fig.update_layout(showlegend=False)
@@ -170,6 +198,7 @@ class CameraPlotter:
     
     def get_rays(self):
         v_grid, u_grid = np.mgrid[:self.height, :self.width]
+        # v_grid, u_grid = np.mgrid[:self.height, :self.width]
         # print("u_grid: ", u_grid)
         # print("v_grid: ", v_grid)
         
@@ -225,12 +254,18 @@ class CameraPlotter:
         self.camera_lookat_world_list.append(camera_lookat)
         self.camera_right_world_list.append(camera_right)
 
-    def plot_camera_coords(self):
+    def plot_camera_coords(self, scale_plot_coords, scale_plot_ray):
         for i in range(len(self.camera_pos_world_list)):
             camera_pos = self.camera_pos_world_list[i]
             camera_up = self.camera_up_world_list[i]
             camera_lookat = self.camera_lookat_world_list[i]
             camera_right = self.camera_right_world_list[i]
+
+            # camera_pos = [v * scale_plot_ray for v in camera_pos]
+            # camera_up = [v * scale_plot_coords for v in camera_up]
+            # camera_lookat = [v * scale_plot_coords for v in camera_lookat]
+            # camera_right = [v * scale_plot_coords for v in camera_right]
+
 
             trace1 = {
                 "line": {"width": 4}, 
@@ -325,18 +360,19 @@ class CameraPlotter:
             self.fig.add_traces([trace1, trace2, trace3, trace4, trace5, trace6])
             # self.fig.add_traces
 
-    def plot_camera_rays(self, plot_scale=1.0):
+    def plot_camera_rays(self, scale_plot_ray=1.0):
         for i in range(len(self.ray_dirs_world_list)):
             camera_pos = self.camera_pos_world_list[i]
             camera_rays = self.ray_dirs_world_list[i]
             # print(camera_rays)
-            ray_index = int(self.width*self.height/2)#this is center of image#4#0
-            camera_ray = normalize(camera_rays[ray_index] - camera_pos)
+            ray_index = len(camera_rays)-1#int((len(camera_rays)-1)/2)#int(self.width*self.height/2)#this is center of image#4#0
+            # camera_ray = normalize(camera_rays[ray_index] - camera_pos)
             # print("before: ", camera_rays[0] - camera_pos)
             # print("normalized: ", camera_ray)
-            # camera_ray = camera_rays[0] - camera_pos
+            print("ray_index: ", ray_index)
+            camera_ray = camera_rays[ray_index] - camera_pos
             # print(self.fl_x)
-            min_t = self.fl_x + 500
+            min_t = self.fl_x + 100
             max_t = min_t + 0.2
             ray_dir_0 = camera_pos + (max_t+1.0) * camera_ray
             # ray_dir_0 = camera_pos + camera_ray
@@ -344,6 +380,14 @@ class CameraPlotter:
             num_point = 5
             dt = (max_t-min_t)/num_point
             ray_dir_0_sample = np.array([camera_pos + (min_t + dt*t) * camera_ray for t in range(num_point)])
+
+            # print("ray_dir_0: ", ray_dir_0)
+            ray_dir_0 = [v * scale_plot_ray for v in ray_dir_0]
+            # print("ray_dir_0: ", ray_dir_0)
+            # print("ray_dir_0_sample: ", ray_dir_0_sample)
+            ray_dir_0_sample = np.array([v * scale_plot_ray for v in ray_dir_0_sample])
+            # print("ray_dir_0_sample: ", ray_dir_0_sample)
+            # camera_pos = [v * scale_plot_ray for v in camera_pos]
 
             trace1 = {
                 "line": {"width": 3}, 
