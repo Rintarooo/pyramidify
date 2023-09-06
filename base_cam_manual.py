@@ -24,15 +24,16 @@ for i in range(num_camera):
     camera_mover = CameraMover()
     # camera_mover.step_x(5*i)
     radius = 5
-    step_x = radius*np.cos(36*i)
-    step_z = radius*np.sin(36*i)
-    # camera_mover.step_x(step_x)#(5*i)#
-    # camera_mover.step_z(step_z)#(5*i)#
+    angle = np.radians(360/num_camera * i)
+    step_x = radius*np.cos(angle)#(36*i)
+    step_z = radius*np.sin(angle)#(36*i)
+    camera_mover.step_x(step_x)#(5*i)#
+    camera_mover.step_z(step_z)#(5*i)#
     
-    camera_mover.step_x(5*i)#
-    camera_mover.step_z(5*i)#
+    # camera_mover.step_x(5*i)#
+    # camera_mover.step_z(5*i)#
     
-    # camera_mover.rotate_y(5*i)
+    # camera_mover.rotate_y(10*i)
     # camera_mover.rotate_x(20*i)
     # camera_mover.rotate_z(20*i)
     M_ext = camera_mover.M_ext
