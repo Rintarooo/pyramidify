@@ -19,14 +19,14 @@ def get_camera(fov, width, height, visualize_scale = 0.5):
     #         [ 0,  height, -height, -height, height],
     #         [ 0,  -1.0,  -1.0,  -1.0,  -1.0]]
 
-    points = [[ 0,  width/2,  width/2, -width/2, -width/2], # pyramid verticies # towards -z
-            [ 0,  height/2, -height/2, -height/2, height/2],
-            [ 0,  -1.,  -1.,  -1.,  -1.]]    # points = [[ 0,  1.,1.,-1.,-1.], # pyramid verticies # towards -z
+    # points = [[ 0,  width/2,  width/2, -width/2, -width/2], # pyramid verticies # towards -z
+    #         [ 0,  height/2, -height/2, -height/2, height/2],
+    #         [ 0,  -1.,  -1.,  -1.,  -1.]]    # points = [[ 0,  1.,1.,-1.,-1.], # pyramid verticies # towards -z
     #         [ 0,  1.,-1.,-1.,1.],
     #         [ 0,  -1.0,  -1.0,  -1.0,  -1.0]]
-    # points = [[ 0,  1., 1., -1., -1.], # pyramid verticies # towards -z
-    #           [ 0,  1., -1., -1., 1.],
-    #           [ 0,  -1., -1., -1., -1.]]    # points = [[ 0,  1.,1.,-1.,-1.], # pyramid verticies # towards -z
+    points = [[ 0,  1., 1., -1., -1.], # pyramid verticies # towards -z
+              [ 0,  1., -1., -1., 1.],
+              [ 0,  -1., -1., -1., -1.]]    # points = [[ 0,  1.,1.,-1.,-1.], # pyramid verticies # towards -z
     lines = [[1, 2], [2, 3], [3, 4], [4, 1], # pyramid lines
             [0, 1], [0, 2], [0, 3], [0, 4]]
     # camera_size = 0.4
@@ -37,14 +37,13 @@ def get_camera(fov, width, height, visualize_scale = 0.5):
     # camera = np.array(points) * dist_camera2plane# camera_size
     camera = np.array(points)
     # # print(camera[0,:])
-    camera[2,:] *= dist_camera2plane# camera_size
+    # camera[2,:] *= dist_camera2plane# camera_size
 
-    camera *= visualize_scale
-    dist_camera2plane *= visualize_scale
-
+    # camera *= visualize_scale
+    # dist_camera2plane *= visualize_scale
     return camera, points, lines, dist_camera2plane
 
-def raycast(width, height, dist_camera2plane, look_dir, camera_right, camera_up):
+def raycast(w_, h_, dist_camera2plane, look_dir, camera_right, camera_up, camera_pos):
     # cx = (float)(w_ / 2)
     # cy = (float)(h_ / 2)
     
@@ -54,31 +53,34 @@ def raycast(width, height, dist_camera2plane, look_dir, camera_right, camera_up)
     cx = (float)(w_ / 2)
     cy = (float)(h_ / 2)
 
-    dw = (float)(2./w_)# 2 = 1.- (-1.)
-    dh = (float)(2./h_)
-    delta = 10**-5
-    lis_w = np.arange(-1., 1.+delta, 2./dw, dtype = float)
-    lis_h = np.arange(-1., 1.+delta, 2./dh, dtype = float)
+    # dw = (float)(2./w_)# 2 = 1.- (-1.)
+    # dh = (float)(2./h_)
+    # delta = 10**-5
+    # lis_w = np.arange(-1., 1.+delta, 2./dw, dtype = float)
+    # lis_h = np.arange(-1., 1.+delta, 2./dh, dtype = float)
 
 
     ray_dirs = []
-    # for px in range(w_):
-    #     for py in range(h_):
+    for px in range(w_):
+        for py in range(h_):
     # for px in range(-1., 1., dw):
     #     for py in range(-1., 1., dh):
-    for px in lis_w:
-        for py in lis_h:
+    # for px in lis_w:
+    #     for py in lis_h:
             # https://github.com/Rintarooo/Volume-Rendering-Tutorial/blob/f27c64f7909f368dc8205adcef2efa24b40e1e29/Tutorial1/src/VolumeRenderer.cpp#L72-L75
             # Compute the ray direction for this pixel. Same as in standard ray tracing.
             # u_ = -.5 + (px + .5) / (float)(w_-1)
             # v_ =  .5 - (py + .5) / (float)(h_-1)
 
-            # u_ = (px + .5) - cx
-            # v_ = (py + .5) - cy
-            u_ = (px + .5*dw) - cx
-            v_ = (py + .5*dh) - cy
+            u_ = (px + .5) - cx
+            v_ = (py + .5) - cy
+            # u_ = (px + .5*dw) - cx
+            # v_ = (py + .5*dh) - cy
             # print("u_, v_: ", u_, v_)
-            ray_dir = look_dir * dist_camera2plane + u_ * camera_right + v_ * camera_up
+            
+            # ray_dir = look_dir * dist_camera2plane + u_ * camera_right + v_ * camera_up
+            ray_dir = np.array([u_ / dist_camera2plane, v_ / dist_camera2plane, -1.])
+            ray_dir -= camera_pos
             ray_dirs.append(ray_dir)
     # print(pxl_boarders_x, pxl_boarders_y)
     # grid = np.mgrid[-w_/2:w_/2:1.0, -w_/2:w_/2:1.0]
@@ -86,32 +88,7 @@ def raycast(width, height, dist_camera2plane, look_dir, camera_right, camera_up)
     return ray_dirs
 
 
-
-def plotly_plot():
-    camera_pos = np.array([0, 0, 0])
-    camera_lookat = np.array([0, 0, -1])
-    camera_up = np.array([0, 1, 0])
-    look_dir = normalize(camera_lookat - camera_pos)# look direction
-    camera_right = np.cross(look_dir, camera_up)
-
-    fov = 45#90#150#45#20#85#10#20#80#45
-
-    # カメラからスクリーンまでの距離
-    # dist_camera2plane = 1. / (2. * np.tan(degree2radian(fov) * 0.5))
-    # print("degree: ", fov)
-    # print("radian: ", degree2radian(fov))
-
-    # print("dist_camera2plane: ", dist_camera2plane)
-    # print(look_dir*dist_camera2plane)
-
-    width, height = 3,3#5,5#3, 3#1,1#5,5#3, 3
-    # camera, points, lines = get_camera(fov, width, height)
-    camera, points, lines, dist_camera2plane = get_camera(fov, width, height)
-
-    ray_dirs = raycast(width, height, dist_camera2plane, look_dir, camera_right, camera_up)
-    
-    # print(ray_dirs)
-
+def get_trace_camera(camera_pos, camera_up, camera_right, camera_lookat):
     trace1 = {
         "line": {"width": 9}, 
         "mode": "lines", 
@@ -202,20 +179,11 @@ def plotly_plot():
         "showscale": False, 
         "autocolorscale": False
     }
+    trace_camera = [trace1, trace2, trace3, trace4, trace5, trace6]
+    return trace_camera
 
-    # ray cast
-    min_t = 2.0
-    max_t = 3.0
-    ray_dir_0 = camera_pos + (max_t+1.0) * ray_dirs[-1]
-    # ray_dir_0_all = [camera_pos + t_ * ray_dirs[-1] for _ in range()]
-    ray_dir_0_sample = []
-    num_point = 20
-    dt = (max_t-min_t)/num_point
-    # ray_dir_0_sample = [list(camera_pos + (min_t + dt*t) * ray_dirs[-1]) for t in range(num_point)]
-    ray_dir_0_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[-1] for t in range(num_point)])
-    # for i in range(t_):
-    #     ray_dirs
-    trace7 = {
+def get_trace_ray(camera_pos, ray_dir_0):
+    trace1 = {
         "line": {"width": 3}, 
         "mode": "lines", 
         "name": "ray_dir_0", 
@@ -227,7 +195,7 @@ def plotly_plot():
         # "marker": {"line": {"color": "rgb(35, 155, 118)"}}, 
         "showlegend": False
     }
-    trace8 = {
+    trace2 = {
         "name": "ray_dir_0", 
         "type": "cone", 
         "u": [ray_dir_0[0]-camera_pos[0]], # 矢印の終点のx座標
@@ -244,11 +212,14 @@ def plotly_plot():
         "showscale": False, 
         "autocolorscale": False
     }
+    trace_ray = [trace1, trace2]
+    return trace_ray
 
+def get_trace_sampling_point(ray_dir_0_sample):
     # print(ray_dir_0_sample[0,:])
     # print(ray_dir_0_sample)
     # print(ray_dir_0_sample[:,0])
-    trace9 = {
+    trace1 = {
         "name": "sampling_point", 
         "type": "scatter3d", 
         # "x": [ray_dir_0_sample[0]], # 矢印の始点のx座標
@@ -272,21 +243,19 @@ def plotly_plot():
             "opacity": 0.2
         }
     }
+    trace_sampling_point = [trace1]
+    return trace_sampling_point
 
-    # data = go.Data([trace1, trace2, trace3, trace4, trace5, trace6])
-    # data = go.Data([trace1, trace2, trace3, trace4, trace5, trace6, trace7, trace8])
-    data = go.Data([trace1, trace2, trace3, trace4, trace5, trace6, trace7, trace8, trace9])
-
-    # fig = Figure(data=data, layout=layout)
-    fig = go.Figure(data=data)
-
+def get_trace_screen(camera, lines):
     color='blue'
     name='camera-plane'
     # square draw
+    trace_screen_lines = []
     for i, j in lines:
         x, y, z = [[axis[i], axis[j]] for axis in camera]
         trace = go.Scatter3d(x=x, y=y, z=z, mode='lines', line_width=2, line_color=color, name=name)
-        fig.add_trace(trace)
+        trace_screen_lines.append(trace)
+        # fig.add_trace(trace)
     # boarder in square draw
     # for i in range(len(pxl_boarders_x)):
     #     x, y, z = [[pxl_boarders_x[i], pxl_boarders_y[j]] for axis in camera]
@@ -304,27 +273,112 @@ def plotly_plot():
     # y = [-width/2 + d for d in range(int(width/2))]#[-1.5, 0, 1.5]
 
 
-    x = [-width/2 + d for d in range(width+1)]#[-1.5, -0.5, 0.5, 1.5]
-    y = [-height/2 + d for d in range(height+1)]#[-1.5, -0.5, 0.5, 1.5]
-    # print(x, y)
-    for i in range(width+1):
-        for j in range(height+1):
-            trace_gridx = go.Scatter3d(x=[x[j]]*(width+1), y=y, z=[camera[-1][-1] for _ in range(width+1)], mode='lines', line_width=2, line_color=color, name="pixel")
-            fig.add_trace(trace_gridx)
-            trace_gridy = go.Scatter3d(x=x, y=[y[i]]*(height+1), z=[camera[-1][-1] for _ in range(height+1)], mode='lines', line_width=2, line_color=color, name="pixel")
-            fig.add_trace(trace_gridy)
+    # dw = (float)(2./width)# 2 = 1.- (-1.)
+    # dh = (float)(2./height)
+    # delta = 10**-5
+    # x = np.arange(-1., 1.+delta, 2./dw, dtype = float)
+    # y = np.arange(-1., 1.+delta, 2./dh, dtype = float)
+    # print(x)
+
+
+    # x = [-width/2 + d for d in range(width+1)]#[-1.5, -0.5, 0.5, 1.5]
+    # y = [-height/2 + d for d in range(height+1)]#[-1.5, -0.5, 0.5, 1.5]
+
+    # # print(x, y)
+    # for i in range(width+1):
+    #     for j in range(height+1):
+    #         trace_gridx = go.Scatter3d(x=[x[j]]*(width+1), y=y, z=[camera[-1][-1] for _ in range(width+1)], mode='lines', line_width=2, line_color=color, name="pixel")
+    #         fig.add_trace(trace_gridx)
+    #         trace_gridy = go.Scatter3d(x=x, y=[y[i]]*(height+1), z=[camera[-1][-1] for _ in range(height+1)], mode='lines', line_width=2, line_color=color, name="pixel")
+    #         fig.add_trace(trace_gridy)
     # fig.add_trace(trace_boarder)
     x, y, z = camera[:, 1:]
     mesh = go.Mesh3d(x=x, y=y, z=z, opacity=0.3, color=color, name=name)
-    fig.add_trace(mesh)
-    fig.update_layout(showlegend=False)
+    trace_screen_mesh = [mesh]
 
     # x, y, z = camera[:, 1:]
     # mesh = go.Mesh3d(x=x, y=y, z=z, opacity=0.5, color=color, name=name)
     # fig.add_trace(mesh)
+    return trace_screen_lines + trace_screen_mesh
+
+def get_trace_cube(pos_cube, mint, maxt, rgba):
+    pos_x, pos_y, pos_z = pos_cube# 3 dimentional tuple
+    # create points
+    x, y, z = np.meshgrid(
+        # np.linspace(mint, maxt, 2), 
+        # np.linspace(mint, maxt, 2), 
+        # np.linspace(mint, maxt, 2),
+        np.linspace(mint+pos_x, maxt+pos_x, 2), 
+        np.linspace(mint+pos_y, maxt+pos_y, 2), 
+        np.linspace(mint+pos_z, maxt+pos_z, 2),
+    )
+    x = x.flatten()
+    y = y.flatten()
+    z = z.flatten()
+    
+    # return go.Mesh3d(x=x, y=y, z=z, alphahull=1, flatshading=True, rgba=rgba, lighting={'diffuse': 0.1, 'specular': 2.0, 'roughness': 0.5})
+    trace_cube = [go.Mesh3d(x=x, y=y, z=z, alphahull=1.0, color=rgba, name = "cube")]
+    return trace_cube
 
 
+def plotly_plot():
+    camera_pos = np.array([0, 0, 0])
+    camera_lookat = np.array([0, 0, -1])
+    camera_up = np.array([0, 1, 0])
+    look_dir = normalize(camera_lookat - camera_pos)# look direction
+    camera_right = np.cross(look_dir, camera_up)
+    # camera_up = np.cross(camera_right, look_dir)
 
+    fov = 45#90#150#45#20#85#10#20#80#45
+    width, height = 3,3#5,5#3, 3#1,1#5,5#3, 3
+    camera, points, lines, dist_camera2plane = get_camera(fov, width, height)
+
+    ray_dirs = raycast(width, height, dist_camera2plane, look_dir, camera_right, camera_up, camera_pos)
+    
+    # M_ext = np.array([[1, 0, 0, 0],
+    #                 [0, 1, 0, 0],
+    #                 [0, 0, 1, 0],
+    #                 [0, 0, 0, 1]], dtype=float)
+
+    # print(ray_dirs)
+
+
+    # ray cast
+    min_t = 3.5
+    max_t = 4.5
+    ray_index = 4
+    assert ray_index <= len(ray_dirs), "ray index should lower than"
+    ray_dir_0 = camera_pos + (max_t+1.0) * ray_dirs[ray_index]#[-1]
+    # ray_dir_0_all = [camera_pos + t_ * ray_dirs[-1] for _ in range()]
+    ray_dir_0_sample = []
+    num_point = 20
+    dt = (max_t-min_t)/num_point
+    # ray_dir_0_sample = [list(camera_pos + (min_t + dt*t) * ray_dirs[-1]) for t in range(num_point)]
+    # ray_dir_0_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[-1] for t in range(num_point)])
+    ray_dir_0_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[ray_index] for t in range(num_point)])
+    # for i in range(t_):
+    #     ray_dirs
+
+    trace_camera = get_trace_camera(camera_pos, camera_up, camera_right, camera_lookat)
+    trace_ray = get_trace_ray(camera_pos, ray_dir_0)
+    trace_sampling_point = get_trace_sampling_point(ray_dir_0_sample)
+    trace_screen = get_trace_screen(camera, lines)
+    pos_cube = (0,0,-3)
+    mint, maxt = -0.5, 0.5
+    rgba = 'rgba(0,0,0,0.2)'
+    trace_cube =get_trace_cube(pos_cube, mint, maxt, rgba)
+
+    # print(ray_dir_0_sample[0,:])
+    # print(ray_dir_0_sample)
+    # print(ray_dir_0_sample[:,0])
+
+
+    # data = go.Data([trace1, trace2, trace3, trace4, trace5, trace6])
+    data = trace_camera + trace_ray + trace_sampling_point + trace_screen + trace_cube
+    # fig = Figure(data=data, layout=layout)
+    fig = go.Figure(data=data)
+    # fig.add_trace(mesh)
+    fig.update_layout(showlegend=False)
     # fig.update_layout(scene=dict(aspectratio=dict(x=1, y=1, z=1),
     #                              camera_eye=dict(x=1.2, y=1.2, z=0.6)))
 
