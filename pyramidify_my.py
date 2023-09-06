@@ -11,12 +11,13 @@ def normalize(x):
 class CameraPlotter:
 
     def __init__(self, transforms, width, height, fov, plot_scale = 0.1, use_transforms_json = True):
-        # `camera["camera_angle_x"]`はカメラのx軸に対する視野角を、
-        # `camera["camera_angle_y"]`はカメラのy軸に対する視野角を表しています。
-        # fov, represented by radian, not degree.
-        self.ca_x = transforms['camera_angle_x']
-        self.ca_y = transforms['camera_angle_y']
-        # self.camera_size = float(camera_size)
+        if use_transforms_json:
+            # `camera["camera_angle_x"]`はカメラのx軸に対する視野角を、
+            # `camera["camera_angle_y"]`はカメラのy軸に対する視野角を表しています。
+            # fov, represented by radian, not degree.
+            self.ca_x = transforms['camera_angle_x']
+            self.ca_y = transforms['camera_angle_y']
+            # self.camera_size = float(camera_size)
         """
         self.points = [[ x_origin,  1,  1, -1, -1], # pyramid verticies
                        [ y_origin,  1, -1, -1,  1],
@@ -33,9 +34,12 @@ class CameraPlotter:
         # self.points = [[ 0,  1,  1, -1, -1], # pyramid verticies
         #                [ 0,  1, -1, -1,  1],
         #                [ 0,  1,  1,  1,  1]]
+        # self.points = [[ 0,  width/2,  width/2, -width/2, -width/2], 
+        #                [ 0,  height/2, -height/2, -height/2, height/2],
+        #                [ 0,  1.0,  1.0,  1.0,  1.0]]# pyramid verticies # towards -z
         self.points = [[ 0,  width/2,  width/2, -width/2, -width/2], 
                        [ 0,  height/2, -height/2, -height/2, height/2],
-                       [ 0,  1.0,  1.0,  1.0,  1.0]]# pyramid verticies # towards -z
+                       [ 0,  -1.0,  -1.0,  -1.0,  -1.0]]# pyramid verticies # towards -z
         self.plot_scale = plot_scale
         # self.points *= self.plot_scale
         
@@ -64,11 +68,12 @@ class CameraPlotter:
 
 
         self.camera_pos = np.array([0, 0, 0])
-        self.camera_lookat = np.array([0, 0, 1])
+        self.camera_lookat = np.array([0, 0, -1])
         self.camera_up = np.array([0, 1, 0])
         # self.camera_up = np.array([0, -1, 0])
         self.look_dir = normalize(self.camera_lookat - self.camera_pos)# look direction
         self.camera_right = np.cross(self.look_dir, self.camera_up)
+        print(self.camera_right)
         self.camera_pos_world_list = []
         self.camera_up_world_list = []
         self.camera_lookat_world_list = []
@@ -111,14 +116,15 @@ class CameraPlotter:
 
         # print("camera0: ", camera)
 
-        camera = -((R @ camera).T - t).T
+        # camera = -((R @ camera).T - t).T
         
+        # camera = R.T @ camera - R.T @ t
         # print("camera1: ", camera)
 
-        # num_points = len(self.points[0])
-        # for i in range(num_points):
-        #     print("camera[:,i]: ", camera[:,i])
-        #     camera[:,i] = R.T @ camera[:,i] - R.T @ t
+        num_points = len(self.points[0])
+        for i in range(num_points):
+            # print("camera[:,i]: ", camera[:,i])
+            camera[:,i] = R.T @ camera[:,i] - R.T @ t
 
         # print(R.T @ camera[:,0] - R.T @ t)
         # print(R.T @ camera[:,1] - R.T @ t)
@@ -194,6 +200,11 @@ class CameraPlotter:
             mesh = go.Mesh3d(x=x, y=y, z=z, opacity=0.3, color=color, name=name)
             self.fig.add_trace(mesh)
         self.fig.update_layout(showlegend=False)
+        self.fig.update_layout(scene =dict(xaxis = dict(range=(-10,10)),
+                               yaxis = dict(range=(-10,10)),
+                               zaxis = dict(range=(-10,10)),
+        ))
+        # self.fig.update_layout(aspectratio=dict(x=1, y=1, z=1))
         self.fig.show()
     
     def get_rays(self):
@@ -245,10 +256,16 @@ class CameraPlotter:
         R = M_ext[:3, :3] # rotation matrix
         t = M_ext[:3, 3] # translation vector
 
-        camera_pos = -((R @ self.camera_pos).T - t).T
-        camera_lookat = -((R @ self.camera_lookat).T - t).T
-        camera_up = -((R @ self.camera_up).T - t).T
-        camera_right = -((R @ self.camera_right).T - t).T
+        # camera_pos = -((R @ self.camera_pos).T - t).T
+        # camera_lookat = -((R @ self.camera_lookat).T - t).T
+        # camera_up = -((R @ self.camera_up).T - t).T
+        # camera_right = -((R @ self.camera_right).T - t).T
+        
+        camera_pos = R.T @ self.camera_pos - R.T @ t
+        camera_lookat = R.T @ self.camera_lookat - R.T @ t
+        camera_up = R.T @ self.camera_up - R.T @ t
+        camera_right = R.T @ self.camera_right - R.T @ t
+
         self.camera_pos_world_list.append(camera_pos)
         self.camera_up_world_list.append(camera_up)
         self.camera_lookat_world_list.append(camera_lookat)
@@ -372,7 +389,7 @@ class CameraPlotter:
             print("ray_index: ", ray_index)
             camera_ray = camera_rays[ray_index] - camera_pos
             # print(self.fl_x)
-            min_t = self.fl_x + 100
+            min_t = self.fl_x + 0.1#100
             max_t = min_t + 0.2
             ray_dir_0 = camera_pos + (max_t+1.0) * camera_ray
             # ray_dir_0 = camera_pos + camera_ray
@@ -452,21 +469,22 @@ class CameraMover:
     def step_z(self, size):
         self.M_ext[2, 3] += size
 
-    def rotate_x(self, angle):
-        angle = np.radians(angle)
-        R_theta = np.array([[np.cos(angle), 0, -np.sin(angle), 0],
-                            [0, 1, 0, 0],
-                            [np.sin(angle), 0, np.cos(angle), 0],
-                            [0, 0, 0, 1]], dtype=float)
-        self.M_ext = R_theta @ self.M_ext
 
-    def rotate_y(self, angle):
+    def rotate_x(self, angle):
         angle = np.radians(angle)
         R_phi = np.array([[1, 0, 0, 0],
                           [0, np.cos(angle), -np.sin(angle), 0],
                           [0, np.sin(angle), np.cos(angle), 0],
                           [0, 0, 0, 1]], dtype=float)
         self.M_ext = R_phi @ self.M_ext
+
+    def rotate_y(self, angle):
+        angle = np.radians(angle)
+        R_theta = np.array([[np.cos(angle), 0, -np.sin(angle), 0],
+                            [0, 1, 0, 0],
+                            [np.sin(angle), 0, np.cos(angle), 0],
+                            [0, 0, 0, 1]], dtype=float)
+        self.M_ext = R_theta @ self.M_ext
 
     def rotate_z(self, angle):
         angle = np.radians(angle)
