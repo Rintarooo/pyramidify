@@ -461,13 +461,13 @@ class CameraMover:
                                        [0, 0, 0, 1]], dtype=float)
 
     def step_x(self, size):
-        self.M_ext[0, 3] += size
+        self.M_ext[0, 3] -= size
 
     def step_y(self, size):
-        self.M_ext[1, 3] += size
+        self.M_ext[1, 3] -= size
 
     def step_z(self, size):
-        self.M_ext[2, 3] += size
+        self.M_ext[2, 3] -= size
 
 
     def rotate_x(self, angle):
