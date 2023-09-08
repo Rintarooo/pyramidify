@@ -20,7 +20,7 @@ def get_volume(grid_resolution):
                 x = i/(H-1)*2.+(-1.)
                 y = k/(W-1)*2.+(-1.)
                 z = i/(D-1)*2.+(-1.)
-                # print(x,y,z)
+                print(x,y,z)
                 range_size = maxval - minval# https://stackoverflow.com/questions/59389241/how-to-generate-a-random-float-in-range-1-1-using-numpy-random-rand
                 density = np.random.rand()*range_size + minval
                 if 0 < x and x < thres:
@@ -40,6 +40,25 @@ def get_volume(grid_resolution):
                 print(f"x: {x}, y: {y}, z: {z}, density: {density}")
 
     return volume_data
+
+def read_volume(point_pos):
+    # https://www.scratchapixel.com/lessons/3d-basic-rendering/volume-rendering-for-developers/volume-rendering-voxel-grids.html
+#     float evalDensity(const Grid* grid, const Point& p)
+# {
+    gridSize = aabb.max - aabb.min
+    pLocal = (point_pos - aabb.min) / gridSize;
+    pVoxel = pLocal * grid_resolution;
+
+    xi =int(np.floor(pVoxel[0]))
+    yi =int(np.floor(pVoxel[1]))
+    zi =int(np.floor(pVoxel[2]))
+
+    ## nearest neighbor
+    # grid_idx = (zi * grid->resolution + yi) * grid->resolution + xi
+    # return grid->density[grid_idx]
+    return volume_data[xi][yi][zi][6] 
+# }
+
 
 class AABB():
     def __init__(self, aabb_min, aabb_max) -> None:
@@ -159,7 +178,7 @@ if __name__=="__main__":
         # for t in range(num_point):
         #     d_ = min_t + dt*t
         #     ray_dir = camera_pos + d_ * ray_dir 
-        min_t = ray_intersect_aabb_and_get_mint(ray_dir, camera_pos, aabb)
+        # min_t = ray_intersect_aabb_and_get_mint(ray_dir, camera_pos, aabb)
 
     # num_point = 20
     # dt = (max_t-min_t)/num_point

@@ -349,9 +349,12 @@ class AABB():
 
 
         assert mint < maxt, "range cube"
+        self.pos_cube_center = pos_cube_center
         pos_x, pos_y, pos_z = pos_cube_center 
         self.min_x, self.min_y, self.min_z = pos_x+mint, pos_y+mint, pos_z+mint
         self.max_x, self.max_y, self.max_z = pos_x+maxt, pos_y+maxt, pos_z+maxt
+        self.min_pos = np.array([self.min_x, self.min_y, self.min_z])
+        self.max_pos = np.array([self.max_x, self.max_y, self.max_z])
         
     def ray_intersect_and_get_mint(self, ray_dir, camera_pos):
         # https://github.com/Rintarooo/instant-ngp/blob/090aed613499ac2dbba3c2cede24befa248ece8a/include/neural-graphics-primitives/bounding_box.cuh#L163
@@ -432,6 +435,67 @@ class AABB():
         print(f"tmin: {tmin}, tmax: {tmax}")
 
         return tmin, tmax, if_intersect
+    
+    def create_density_volume(self, grid_resolution):
+        H, W, D = [grid_resolution for _ in range(3)]
+        num_celss = H*W*D
+        volume_data = np.ones((H, W, D, 7))
+        # get_aabb()
+
+        thres = 0.65
+        minval, maxval = 0, 0.5
+        for i in range(H):
+            for k in range(W):
+                for j in range(D):
+                    # x = i/(H-1)*2.+(-1.)
+                    # y = k/(W-1)*2.+(-1.)
+                    # z = i/(D-1)*2.+(-1.)
+                    x = i/(H-1)*(self.max_x-self.min_x)+self.min_x#[0,1] --> #[0, self,max_x]
+                    y = k/(W-1)*(self.max_y-self.min_y)+self.min_y
+                    z = i/(D-1)*(self.max_z-self.min_z)+self.min_z
+                    # print(x,y,z)
+                    range_size = maxval - minval# https://stackoverflow.com/questions/59389241/how-to-generate-a-random-float-in-range-1-1-using-numpy-random-rand
+                    density = np.random.rand()*range_size + minval
+                    if 0 < x and x < thres:
+                        if 0 < y and y < thres:
+                            if 0 < z and z < thres:
+                                density = 0.95
+                    r, g, b = 1, 1, 1
+                    # print(volume_data[i][k][j].shape)
+                    # volume_data[i][k][j] = (x,y,z,density)
+                    volume_data[i][k][j][0] = x
+                    volume_data[i][k][j][1] = y
+                    volume_data[i][k][j][2] = z
+                    volume_data[i][k][j][3] = r
+                    volume_data[i][k][j][4] = g
+                    volume_data[i][k][j][5] = b
+                    volume_data[i][k][j][6] = density
+                    # print(f"x: {x}, y: {y}, z: {z}, density: {density}")
+        return volume_data
+
+    def read_volume(self, point_pos, grid_resolution, volume_data):
+        # https://www.scratchapixel.com/lessons/3d-basic-rendering/volume-rendering-for-developers/volume-rendering-voxel-grids.html
+    #     float evalDensity(const Grid* grid, const Point& p)
+    # {
+        gridSize = self.max_pos - self.min_pos
+        pLocal = (point_pos - self.min_pos) / gridSize
+        pVoxel = pLocal * grid_resolution
+        xi =int(np.floor(pVoxel[0]))
+        yi =int(np.floor(pVoxel[1]))
+        zi =int(np.floor(pVoxel[2]))
+
+        ## nearest neighbor
+        # grid_idx = (zi * grid->resolution + yi) * grid->resolution + xi
+        # return grid->density[grid_idx]
+        density = volume_data[xi][yi][zi][6]
+        x = volume_data[xi][yi][zi][0]
+        y = volume_data[xi][yi][zi][1]
+        z = volume_data[xi][yi][zi][2]
+        # print("point_pos: ", point_pos)
+        # print(f"xi: {xi}, yi: {yi}, zi: {zi}, \nx: {x}, y: {y}, z: {z}, read density: {density}")
+        return density
+    # }
+
 
 def plotly_plot():
     camera_pos = np.array([0, 0, 0])
@@ -456,78 +520,58 @@ def plotly_plot():
     # print(ray_dirs)
     
     trace_camera = get_trace_camera(camera_pos, camera_up, camera_right, camera_lookat)
+    trace_screen = get_trace_screen(camera, lines)
   
-
+    pos_cube_center = (0,0,9)#(0,0,7)#(0,0,-3)
+    mint, maxt = -3.0, 3.0#-1.0, 1.0#-0.5, 0.5
+    rgba = 'rgba(0,0,0,0.2)'
+    trace_cube =get_trace_cube(pos_cube_center, mint, maxt, rgba)
+    # aabb_min, aabb_max = -1, 1
+    # aabb = AABB(aabb_min, aabb_max)
+    aabb = AABB(pos_cube_center, mint, maxt)
+    ray_index_lis = [0, 4, 8]
     # ray cast
     min_t = 4.5#3.5
     max_t = 9.5#4.5
     assert min_t < max_t, "ray marching range"
+    trace_ray_lis = []
+    trace_sampling_point_lis = []
 
-    # 1st index ray
-    ray_index_0 = 0
-    assert ray_index_0 <= len(ray_dirs), "ray index should lower than"
-    ray_dir_0 = camera_pos + (max_t+1.0) * ray_dirs[ray_index_0]#[-1]
-    # ray_dir_0_all = [camera_pos + t_ * ray_dirs[-1] for _ in range()]
-    ray_dir_0_sample = []
     num_point = 10
-    dt = (max_t-min_t)/num_point
-    # ray_dir_0_sample = [list(camera_pos + (min_t + dt*t) * ray_dirs[-1]) for t in range(num_point)]
-    # ray_dir_0_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[-1] for t in range(num_point)])
-    ray_dir_0_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[ray_index_0] for t in range(num_point)])
-    trace_ray = get_trace_ray(camera_pos, ray_dir_0, "ray_dir_"+str(ray_index_0))
-    trace_sampling_point = get_trace_sampling_point(ray_dir_0_sample)
-    
-    # 2nd index ray
-    ray_index_1 = 8
-    assert ray_index_1 <= len(ray_dirs), "ray index should lower than"
-    ray_dir_1 = camera_pos + (max_t+1.0) * ray_dirs[ray_index_1]#[-1]
-    ray_dir_1_sample = []
-    num_point = 10
-    dt = (max_t-min_t)/num_point
-    # ray_dir_1_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[ray_index_1] for t in range(num_point)])
-    ray_dir_1_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[ray_index_1] for t in range(num_point)])
-    trace_ray_1 = get_trace_ray(camera_pos, ray_dir_1, "ray_dir_"+str(ray_index_1))
-    trace_sampling_point_1 = get_trace_sampling_point(ray_dir_1_sample)
+    for ray_idx in ray_index_lis:
+        assert ray_idx <= len(ray_dirs), "ray index should lower than ray number"
+        ray_dir = ray_dirs[ray_idx]
+        tmin, tmax, if_intersect = aabb.ray_intersect_and_get_mint(ray_dir, camera_pos)
+        # print("if_intersect: ", if_intersect)
+        # print("tmin: ", tmin)
+        # print("tmax: ", tmax)
+        if not if_intersect:
+            tmin = 4.5
+            tmax = 9.5
+        assert min_t < max_t, "ray marching range"
+        dt = (tmax-tmin)/num_point
+        # r(t) = o + td
+        sampling_point = np.array([camera_pos + (tmin + dt*t) * ray_dirs[ray_idx] for t in range(num_point)])
+        ray_max = camera_pos + (max_t+3.0) * ray_dir
 
-    # 3rd index ray
-    ray_index_2 = 4
-    assert ray_index_2 <= len(ray_dirs), "ray index should lower than"
-    ray_dir_2 = camera_pos + (max_t+1.0) * ray_dirs[ray_index_2]#[-1]
-    ray_dir_2_sample = []
-    num_point = 10
-    min_t = 6.0
-    max_t = 8.0#4.5
-    assert min_t < max_t, "ray marching range"
-    dt = (max_t-min_t)/num_point
-    ray_dir_2_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[ray_index_2] for t in range(num_point)])
-    trace_ray_2 = get_trace_ray(camera_pos, ray_dir_2, "ray_dir_"+str(ray_index_2))
-    trace_sampling_point_2 = get_trace_sampling_point(ray_dir_2_sample)
+        # for plotly
+        trace_ray = get_trace_ray(camera_pos, ray_max, "ray_dir_"+str(ray_idx))
+        trace_sampling_point = get_trace_sampling_point(sampling_point)
+        trace_ray_lis.append(trace_ray)
+        trace_sampling_point_lis.append(trace_sampling_point)
 
-    trace_screen = get_trace_screen(camera, lines)
-    pos_cube_center = (0,0,7)#(0,0,-3)
-    mint, maxt = -1.0, 1.0#-0.5, 0.5
-    rgba = 'rgba(0,0,0,0.2)'
-    trace_cube =get_trace_cube(pos_cube_center, mint, maxt, rgba)
-
-    # print(ray_dir_0_sample[0,:])
-    # print(ray_dir_0_sample)
-    # print(ray_dir_0_sample[:,0])
-    # aabb_min, aabb_max = -1, 1
-    # aabb = AABB(aabb_min, aabb_max)
-    aabb = AABB(pos_cube_center, mint, maxt)
-    for i in range(len(ray_dirs)):
-        if i in [ray_index_0, ray_index_1, ray_index_2]:
-            ray_dir = ray_dirs[i]
-            tmin, tmax, if_intersect = aabb.ray_intersect_and_get_mint(ray_dir, camera_pos)
-            print("if_intersect: ", if_intersect)
-            print("tmin: ", tmin)
-            print("tmax: ", tmax)
-
-
+    grid_resolution =3
+    density_vol = aabb.create_density_volume(grid_resolution)
+    # point_pos = trace_sampling_point_lis[0][0]
+    point_pos = np.array([trace_sampling_point_lis[0][0]["x"][0], trace_sampling_point_lis[0][0]["y"][0], trace_sampling_point_lis[0][0]["z"][0]])
+    density = aabb.read_volume(point_pos, grid_resolution, density_vol)
 
 
     # data = go.Data([trace1, trace2, trace3, trace4, trace5, trace6])
-    data = trace_camera + trace_ray + trace_sampling_point + trace_screen + trace_cube + trace_ray_1 + trace_sampling_point_1 + trace_ray_2 + trace_sampling_point_2
+    # data = trace_camera + trace_ray + trace_sampling_point + trace_screen + trace_cube + trace_ray_1 + trace_sampling_point_1 + trace_ray_2 + trace_sampling_point_2
+    data = trace_camera + trace_screen + trace_cube# + trace_ray_lis + trace_sampling_point_lis
+    for k in range(len(trace_ray_lis)):
+        data += trace_ray_lis[k] + trace_sampling_point_lis[k]
     # fig = Figure(data=data, layout=layout)
     fig = go.Figure(data=data)
     # fig.add_trace(mesh)
