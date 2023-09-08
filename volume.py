@@ -12,14 +12,21 @@ def get_volume(grid_resolution):
     volume_data = np.ones((H, W, D, 7))
     # get_aabb()
 
+    thres = 0.65
+    minval, maxval = 0, 0.5
     for i in range(H):
         for k in range(W):
             for j in range(D):
                 x = i/(H-1)*2.+(-1.)
                 y = k/(W-1)*2.+(-1.)
                 z = i/(D-1)*2.+(-1.)
-                print(x,y,z)
-                density = np.random.rand()
+                # print(x,y,z)
+                range_size = maxval - minval# https://stackoverflow.com/questions/59389241/how-to-generate-a-random-float-in-range-1-1-using-numpy-random-rand
+                density = np.random.rand()*range_size + minval
+                if 0 < x and x < thres:
+                    if 0 < y and y < thres:
+                        if 0 < z and z < thres:
+                            density = 0.95
                 r, g, b = 1, 1, 1
                 # print(volume_data[i][k][j].shape)
                 # volume_data[i][k][j] = (x,y,z,density)
@@ -30,6 +37,7 @@ def get_volume(grid_resolution):
                 volume_data[i][k][j][4] = g
                 volume_data[i][k][j][5] = b
                 volume_data[i][k][j][6] = density
+                print(f"x: {x}, y: {y}, z: {z}, density: {density}")
 
     return volume_data
 
@@ -69,24 +77,55 @@ def raycast(w_, h_, fl_x, look_dir,camera_pos):
             ray_dirs.append(ray_dir)
     return ray_dirs
 
-def ray_intersect(ray_dir, camera_pos, aabb):
+def ray_intersect_aabb_and_get_mint(ray_dir, camera_pos, aabb):
     # https://github.com/Southparketeer/SLAM-Large-Dense-Scene-Real-Time-3D-Reconstruction/blob/master/CUDA_Kernel/cu_raycast.cu#L127-L132
     # https://www.scratchapixel.com/lessons/3d-basic-rendering/volume-rendering-for-developers/volume-rendering-voxel-grids.html
     # https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection.html
-    tminx = aabb.min_x - camera_pos[0]# camera_pos.x
-    tminx /= ray_dir
-    tminy = aabb.min_y - camera_pos[1]/ ray_dir
-    tmaxx = aabb.max_x - camera_pos[0]/ ray_dir
-    tmaxy = aabb.max_y - camera_pos[1]/ ray_dir
+    # print("ray_dir[0]: ", ray_dir[0])
 
-    # if 
+    if_intersect = False
+
+    # r(t) = o + td, ray_dir is d
+    if ray_dir[0] != 0:# prevent divide by 0
+        # camera_pos[0] == camera_pos.x
+        tmin = aabb.min_x - camera_pos[0] / ray_dir[0]
+        tmax = aabb.max_x - camera_pos[0]/ ray_dir[0]
+    else:
+        tmin, tmax = 0, 0
+    
+    if ray_dir[1] != 0:
+        tmin_y = aabb.min_y - camera_pos[1]/ ray_dir[1]
+        tmax_y = aabb.max_y - camera_pos[1]/ ray_dir[1]
+    else:
+        tmin_y, tmax_y = 0, 0
+
+    if tmin > tmax_y or tmin_y > tmax: if_intersect = False
+    # '''
+    # '''
+    tmin = np.min([tmin, tmin_y])
+    tmax = np.max([tmax, tmax_y])
+
+    if ray_dir[2] != 0:
+        tmin_z = aabb.min_y - camera_pos[2]/ ray_dir[2]
+        tmax_z = aabb.max_y - camera_pos[2]/ ray_dir[2]
+    else:
+        tmin_z, tmax_z = 0, 0
+    
+    if tmin > tmax_z or tmin_z > tmax: if_intersect = False
+
+    tmin = np.min([tmin, tmin_z])
+    tmax = np.max([tmax, tmax_z])
+    if_intersect = True
+    # print("if_intersect: ", if_intersect)
+    # print("tmin: ", tmin)
+    # print("tmax: ", tmax)
 
 
 
 if __name__=="__main__":
     # path = 'dat/christmastree512x499x512.dat'
     # open_dat(path)
-    grid_resolution = 3
+    grid_resolution = 6
     volume_data = get_volume(grid_resolution)
     # print(volume_data[0][0][0][-1])
 

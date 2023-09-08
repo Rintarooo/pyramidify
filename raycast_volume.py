@@ -24,9 +24,17 @@ def get_camera(fov, width, height, visualize_scale = 0.5):
     #         [ 0,  -1.,  -1.,  -1.,  -1.]]    # points = [[ 0,  1.,1.,-1.,-1.], # pyramid verticies # towards -z
     #         [ 0,  1.,-1.,-1.,1.],
     #         [ 0,  -1.0,  -1.0,  -1.0,  -1.0]]
-    points = [[ 0,  1., 1., -1., -1.], # pyramid verticies # towards -z
-              [ 0,  1., -1., -1., 1.],
-              [ 0,  -1., -1., -1., -1.]]    # points = [[ 0,  1.,1.,-1.,-1.], # pyramid verticies # towards -z
+
+    ## z negative look at
+    # points = [[ 0,  1., 1., -1., -1.], # pyramid verticies # towards -z
+    #           [ 0,  1., -1., -1., 1.],
+    #           [ 0,  -1., -1., -1., -1.]]    # points = [[ 0,  1.,1.,-1.,-1.], # pyramid verticies # towards -z
+    # points = [[ 0,  1., 1., -1., -1.], # pyramid verticies # towards z
+    #           [ 0,  1., -1., -1., 1.],
+    #           [ 0,  1., 1., 1., 1.]] 
+    points = [[ 0,  width/2,  width/2, -width/2, -width/2], # pyramid verticies # towards -z
+            [ 0,  height/2, -height/2, -height/2, height/2],
+            [ 0,  1.,  1.,  1.,  1.]] 
     lines = [[1, 2], [2, 3], [3, 4], [4, 1], # pyramid lines
             [0, 1], [0, 2], [0, 3], [0, 4]]
     # camera_size = 0.4
@@ -37,7 +45,7 @@ def get_camera(fov, width, height, visualize_scale = 0.5):
     # camera = np.array(points) * dist_camera2plane# camera_size
     camera = np.array(points)
     # # print(camera[0,:])
-    # camera[2,:] *= dist_camera2plane# camera_size
+    camera[2,:] *= dist_camera2plane# camera_size
 
     # camera *= visualize_scale
     # dist_camera2plane *= visualize_scale
@@ -79,7 +87,8 @@ def raycast(w_, h_, dist_camera2plane, look_dir, camera_right, camera_up, camera
             # print("u_, v_: ", u_, v_)
             
             # ray_dir = look_dir * dist_camera2plane + u_ * camera_right + v_ * camera_up
-            ray_dir = np.array([u_ / dist_camera2plane, v_ / dist_camera2plane, -1.])
+            # ray_dir = np.array([u_ / dist_camera2plane, v_ / dist_camera2plane, -1.])
+            ray_dir = np.array([u_ / dist_camera2plane, v_ / dist_camera2plane, 1.])
             ray_dir -= camera_pos
             ray_dirs.append(ray_dir)
     # print(pxl_boarders_x, pxl_boarders_y)
@@ -182,11 +191,11 @@ def get_trace_camera(camera_pos, camera_up, camera_right, camera_lookat):
     trace_camera = [trace1, trace2, trace3, trace4, trace5, trace6]
     return trace_camera
 
-def get_trace_ray(camera_pos, ray_dir_0):
+def get_trace_ray(camera_pos, ray_dir_0, name):
     trace1 = {
         "line": {"width": 3}, 
         "mode": "lines", 
-        "name": "ray_dir_0", 
+        "name": name,#"ray_dir_0", 
         "type": "scatter3d", 
         "x": [camera_pos[0], ray_dir_0[0]], 
         "y": [camera_pos[1], ray_dir_0[1]], 
@@ -196,7 +205,7 @@ def get_trace_ray(camera_pos, ray_dir_0):
         "showlegend": False
     }
     trace2 = {
-        "name": "ray_dir_0", 
+        "name": name, #"ray_dir_0", 
         "type": "cone", 
         "u": [ray_dir_0[0]-camera_pos[0]], # 矢印の終点のx座標
         "v": [ray_dir_0[1]-camera_pos[1]], 
@@ -312,6 +321,7 @@ def get_trace_cube(pos_cube, mint, maxt, rgba):
         np.linspace(mint+pos_y, maxt+pos_y, 2), 
         np.linspace(mint+pos_z, maxt+pos_z, 2),
     )
+    # print(x)
     x = x.flatten()
     y = y.flatten()
     z = z.flatten()
@@ -320,10 +330,113 @@ def get_trace_cube(pos_cube, mint, maxt, rgba):
     trace_cube = [go.Mesh3d(x=x, y=y, z=z, alphahull=1.0, color=rgba, name = "cube")]
     return trace_cube
 
+def swap_val(a, b):
+    swap_tmp = a
+    a = b
+    b = swap_tmp
+    return a, b
+    # return b, a
+
+class AABB():
+    def __init__(self, pos_cube_center, mint, maxt) -> None:
+        # self.min_x, self.min_y, self.min_z = -aabb_min, -aabb_min, -aabb_min#-1, -1, -1
+        # self.max_x, self.max_y, self.max_z = aabb_max, aabb_max, aabb_max#1, 1, 1
+        # self.min_x, self.min_y, self.min_z = -0.5, -0.5, -3.5#-1, -1, -1
+        # self.max_x, self.max_y, self.max_z = 0.5, 0.5, -2.5#1, 1, 1
+
+        # self.min_x, self.min_y, self.min_z = -1.0, -1.0, 6.0#-1, -1, -1
+        # self.max_x, self.max_y, self.max_z = 1.0, 1.0, 8.0#1, 1, 1
+
+
+        assert mint < maxt, "range cube"
+        pos_x, pos_y, pos_z = pos_cube_center 
+        self.min_x, self.min_y, self.min_z = pos_x+mint, pos_y+mint, pos_z+mint
+        self.max_x, self.max_y, self.max_z = pos_x+maxt, pos_y+maxt, pos_z+maxt
+        
+    def ray_intersect_and_get_mint(self, ray_dir, camera_pos):
+        # https://github.com/Rintarooo/instant-ngp/blob/090aed613499ac2dbba3c2cede24befa248ece8a/include/neural-graphics-primitives/bounding_box.cuh#L163
+        # https://github.com/Southparketeer/SLAM-Large-Dense-Scene-Real-Time-3D-Reconstruction/blob/master/CUDA_Kernel/cu_raycast.cu#L127-L132
+        # https://www.scratchapixel.com/lessons/3d-basic-rendering/volume-rendering-for-developers/volume-rendering-voxel-grids.html
+        # https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-box-intersection.html
+        # print("ray_dir[0]: ", ray_dir[0])
+
+        # max_ray_scale = 10.0
+        # ray_dir *= max_ray_scale
+
+        if_intersect = True
+        print("ray_dir: ", ray_dir)
+
+        # r(t) = o + td, ray_dir is d
+        # if ray_dir[0] != 0:# prevent divide by 0
+        #     # camera_pos[0] == camera_pos.x
+        #     # tmin = aabb.min_x - camera_pos[0] / ray_dir[0]
+        #     tmin = (self.min_x - camera_pos[0]) / ray_dir[0]
+        #     tmax = (self.max_x - camera_pos[0])/ ray_dir[0]
+        # else:
+        #     tmin, tmax = 100, 100#0, 0
+        if ray_dir[0] == 0:
+            tmin = -np.inf
+            tmax = np.inf
+        else:
+            inv_ray_dir_x = 1. / ray_dir[0]
+            tmin = (self.min_x - camera_pos[0]) * inv_ray_dir_x
+            tmax = (self.max_x - camera_pos[0]) * inv_ray_dir_x
+
+        if (tmin > tmax): tmin, tmax = swap_val(tmin, tmax)
+        print(f"tminx: {tmin}, tmaxx: {tmax}")
+        
+        # if ray_dir[1] != 0:
+        #     tmin_y = (self.min_y - camera_pos[1])/ ray_dir[1]
+        #     tmax_y = (self.max_y - camera_pos[1])/ ray_dir[1]
+        # else:
+        #     tmin_y, tmax_y = 100, 100
+        if ray_dir[1] == 0:
+            tmin_y = -np.inf
+            tmax_y = np.inf
+        else:
+            inv_ray_dir_y = 1. / ray_dir[1]
+            tmin_y = (self.min_y - camera_pos[1]) * inv_ray_dir_y
+            tmax_y = (self.max_y - camera_pos[1]) * inv_ray_dir_y
+        if (tmin_y > tmax_y): tmin_y, tmax_y = swap_val(tmin_y, tmax_y)
+
+        if tmin > tmax_y or tmin_y > tmax:
+            if_intersect = False
+            return tmin, tmax, if_intersect
+        # tmin = np.min([tmin, tmin_y])
+        # tmax = np.max([tmax, tmax_y])
+        if tmin_y > tmin: tmin = tmin_y
+        if tmax_y < tmax: tmax = tmax_y
+        print(f"tmin: {tmin}, tmax: {tmax}")
+
+
+
+        # if ray_dir[2] != 0:
+        #     tmin_z = (self.min_z - camera_pos[2])/ ray_dir[2]
+        #     tmax_z = (self.max_z - camera_pos[2])/ ray_dir[2]
+        #     print(f"tmin_z: {tmin_z}, tmax_z: {tmax_z}")
+        # else:
+        #     tmin_z, tmax_z = 100, 100
+        inv_ray_dir_z = 1. / ray_dir[2]
+        tmin_z = (self.min_z - camera_pos[2]) * inv_ray_dir_z
+        tmax_z = (self.max_z - camera_pos[2]) * inv_ray_dir_z
+        if (tmin_z > tmax_z): tmin_z, tmax_z = swap_val(tmin_z, tmax_z)
+        
+        if tmin > tmax_z or tmin_z > tmax:
+            if_intersect = False
+            return tmin, tmax, if_intersect
+
+        # tmin = np.min([tmin, tmin_z])
+        # tmax = np.max([tmax, tmax_z])
+        if tmin_z > tmin: tmin = tmin_z
+        if tmax_z < tmax: tmax = tmax_z
+        print(f"tmin: {tmin}, tmax: {tmax}")
+
+        return tmin, tmax, if_intersect
 
 def plotly_plot():
     camera_pos = np.array([0, 0, 0])
-    camera_lookat = np.array([0, 0, -1])
+    # camera_lookat = np.array([0, 0, -1])
+    camera_lookat = np.array([0, 0, 1])
     camera_up = np.array([0, 1, 0])
     look_dir = normalize(camera_lookat - camera_pos)# look direction
     camera_right = np.cross(look_dir, camera_up)
@@ -341,40 +454,80 @@ def plotly_plot():
     #                 [0, 0, 0, 1]], dtype=float)
 
     # print(ray_dirs)
-
+    
+    trace_camera = get_trace_camera(camera_pos, camera_up, camera_right, camera_lookat)
+  
 
     # ray cast
-    min_t = 3.5
-    max_t = 4.5
-    ray_index = 4
-    assert ray_index <= len(ray_dirs), "ray index should lower than"
-    ray_dir_0 = camera_pos + (max_t+1.0) * ray_dirs[ray_index]#[-1]
+    min_t = 4.5#3.5
+    max_t = 9.5#4.5
+    assert min_t < max_t, "ray marching range"
+
+    # 1st index ray
+    ray_index_0 = 0
+    assert ray_index_0 <= len(ray_dirs), "ray index should lower than"
+    ray_dir_0 = camera_pos + (max_t+1.0) * ray_dirs[ray_index_0]#[-1]
     # ray_dir_0_all = [camera_pos + t_ * ray_dirs[-1] for _ in range()]
     ray_dir_0_sample = []
-    num_point = 20
+    num_point = 10
     dt = (max_t-min_t)/num_point
     # ray_dir_0_sample = [list(camera_pos + (min_t + dt*t) * ray_dirs[-1]) for t in range(num_point)]
     # ray_dir_0_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[-1] for t in range(num_point)])
-    ray_dir_0_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[ray_index] for t in range(num_point)])
-    # for i in range(t_):
-    #     ray_dirs
-
-    trace_camera = get_trace_camera(camera_pos, camera_up, camera_right, camera_lookat)
-    trace_ray = get_trace_ray(camera_pos, ray_dir_0)
+    ray_dir_0_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[ray_index_0] for t in range(num_point)])
+    trace_ray = get_trace_ray(camera_pos, ray_dir_0, "ray_dir_"+str(ray_index_0))
     trace_sampling_point = get_trace_sampling_point(ray_dir_0_sample)
+    
+    # 2nd index ray
+    ray_index_1 = 8
+    assert ray_index_1 <= len(ray_dirs), "ray index should lower than"
+    ray_dir_1 = camera_pos + (max_t+1.0) * ray_dirs[ray_index_1]#[-1]
+    ray_dir_1_sample = []
+    num_point = 10
+    dt = (max_t-min_t)/num_point
+    # ray_dir_1_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[ray_index_1] for t in range(num_point)])
+    ray_dir_1_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[ray_index_1] for t in range(num_point)])
+    trace_ray_1 = get_trace_ray(camera_pos, ray_dir_1, "ray_dir_"+str(ray_index_1))
+    trace_sampling_point_1 = get_trace_sampling_point(ray_dir_1_sample)
+
+    # 3rd index ray
+    ray_index_2 = 4
+    assert ray_index_2 <= len(ray_dirs), "ray index should lower than"
+    ray_dir_2 = camera_pos + (max_t+1.0) * ray_dirs[ray_index_2]#[-1]
+    ray_dir_2_sample = []
+    num_point = 10
+    min_t = 6.0
+    max_t = 8.0#4.5
+    assert min_t < max_t, "ray marching range"
+    dt = (max_t-min_t)/num_point
+    ray_dir_2_sample = np.array([camera_pos + (min_t + dt*t) * ray_dirs[ray_index_2] for t in range(num_point)])
+    trace_ray_2 = get_trace_ray(camera_pos, ray_dir_2, "ray_dir_"+str(ray_index_2))
+    trace_sampling_point_2 = get_trace_sampling_point(ray_dir_2_sample)
+
     trace_screen = get_trace_screen(camera, lines)
-    pos_cube = (0,0,-3)
-    mint, maxt = -0.5, 0.5
+    pos_cube_center = (0,0,7)#(0,0,-3)
+    mint, maxt = -1.0, 1.0#-0.5, 0.5
     rgba = 'rgba(0,0,0,0.2)'
-    trace_cube =get_trace_cube(pos_cube, mint, maxt, rgba)
+    trace_cube =get_trace_cube(pos_cube_center, mint, maxt, rgba)
 
     # print(ray_dir_0_sample[0,:])
     # print(ray_dir_0_sample)
     # print(ray_dir_0_sample[:,0])
+    # aabb_min, aabb_max = -1, 1
+    # aabb = AABB(aabb_min, aabb_max)
+    aabb = AABB(pos_cube_center, mint, maxt)
+    for i in range(len(ray_dirs)):
+        if i in [ray_index_0, ray_index_1, ray_index_2]:
+            ray_dir = ray_dirs[i]
+            tmin, tmax, if_intersect = aabb.ray_intersect_and_get_mint(ray_dir, camera_pos)
+            print("if_intersect: ", if_intersect)
+            print("tmin: ", tmin)
+            print("tmax: ", tmax)
+
+
 
 
     # data = go.Data([trace1, trace2, trace3, trace4, trace5, trace6])
-    data = trace_camera + trace_ray + trace_sampling_point + trace_screen + trace_cube
+    data = trace_camera + trace_ray + trace_sampling_point + trace_screen + trace_cube + trace_ray_1 + trace_sampling_point_1 + trace_ray_2 + trace_sampling_point_2
     # fig = Figure(data=data, layout=layout)
     fig = go.Figure(data=data)
     # fig.add_trace(mesh)
