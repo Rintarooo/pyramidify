@@ -1,7 +1,40 @@
 import numpy as np
 import plotly.graph_objs as go
+import matplotlib.pyplot as plt
+import logging
+import os
 
 from pyramidify import CameraPlotter, CameraMover
+
+# https://yassanabc.com/2021/04/14/%E3%80%90python%E3%80%91logging%E3%81%AE%E6%AD%A3%E3%81%97%E3%81%84%E4%BD%BF%E3%81%84%E6%96%B9/
+# https://note.com/enkey/n/na366b382800a
+# https://stackoverflow.com/questions/533048/how-to-log-source-file-name-and-line-number-in-python
+logger = logging.getLogger(__name__)
+# logger = logging.getLogger()
+# logging.disable(logging.CRITICAL)
+
+log_file = './out/logging.log'
+if os.path.exists(log_file):
+    os.remove(log_file)
+filehandler = logging.FileHandler(log_file)
+# streamhandler = logging.StreamHandler()
+
+# format = '[%(asctime)s][%(levelname)s] %(message)s'
+format = '[%(asctime)s][%(levelname)s] {%(module)s.%(funcName)s, l: %(lineno)d} %(message)s'
+# datefmt='%Y/%m/%d %I:%M:%S'
+datefmt='%I:%M:%Ss'
+
+formatter = logging.Formatter(format, datefmt)
+# streamhandler.setFormatter(formatter)
+filehandler.setFormatter(formatter)
+# logger.addHandler(streamhandler)
+logger.addHandler(filehandler)
+
+logger.setLevel(logging.DEBUG)  # DEBUG #INFO #WARNING
+
+logger.info("Logger INFO mode Start!")
+logger.debug("Logger DEBUG mode Start!")
+# logger.debug("current dir : {}".format(os.getcwd()))
 
 def degree2radian(deg):
     # return deg * 3.141592659 /180.
@@ -45,7 +78,8 @@ def get_camera(fov, width, height, visualize_scale = 0.5):
     # camera = np.array(points) * dist_camera2plane# camera_size
     camera = np.array(points)
     # # print(camera[0,:])
-    camera[2,:] *= dist_camera2plane# camera_size
+
+    # camera[2,:] *= dist_camera2plane# camera_size
 
     # camera *= visualize_scale
     # dist_camera2plane *= visualize_scale
@@ -338,7 +372,7 @@ def swap_val(a, b):
     # return b, a
 
 class AABB():
-    def __init__(self, pos_cube_center, mint, maxt) -> None:
+    def __init__(self, pos_cube_center, mint, maxt, grid_resolution) -> None:
         # self.min_x, self.min_y, self.min_z = -aabb_min, -aabb_min, -aabb_min#-1, -1, -1
         # self.max_x, self.max_y, self.max_z = aabb_max, aabb_max, aabb_max#1, 1, 1
         # self.min_x, self.min_y, self.min_z = -0.5, -0.5, -3.5#-1, -1, -1
@@ -350,11 +384,19 @@ class AABB():
 
         assert mint < maxt, "range cube"
         self.pos_cube_center = pos_cube_center
-        pos_x, pos_y, pos_z = pos_cube_center 
-        self.min_x, self.min_y, self.min_z = pos_x+mint, pos_y+mint, pos_z+mint
-        self.max_x, self.max_y, self.max_z = pos_x+maxt, pos_y+maxt, pos_z+maxt
+        self.pos_x_center, self.pos_y_center, self.pos_z_center = pos_cube_center 
+        self.min_x, self.min_y, self.min_z = self.pos_x_center+mint, self.pos_y_center+mint, self.pos_z_center+mint
+        self.max_x, self.max_y, self.max_z = self.pos_x_center+maxt, self.pos_y_center+maxt, self.pos_z_center+maxt
         self.min_pos = np.array([self.min_x, self.min_y, self.min_z])
         self.max_pos = np.array([self.max_x, self.max_y, self.max_z])
+
+        # density volume
+        self.grid_resolution = grid_resolution
+        self.H, self.W, self.D = [self.grid_resolution for _ in range(3)]
+        self.num_cell = self.H * self.W * self.D
+        # initialize
+        self.density_volume = np.zeros((self.H, self.W, self.D, 7))
+
         
     def ray_intersect_and_get_mint(self, ray_dir, camera_pos):
         # https://github.com/Rintarooo/instant-ngp/blob/090aed613499ac2dbba3c2cede24befa248ece8a/include/neural-graphics-primitives/bounding_box.cuh#L163
@@ -367,7 +409,7 @@ class AABB():
         # ray_dir *= max_ray_scale
 
         if_intersect = True
-        print("ray_dir: ", ray_dir)
+        # print("ray_dir: ", ray_dir)
 
         # r(t) = o + td, ray_dir is d
         # if ray_dir[0] != 0:# prevent divide by 0
@@ -386,8 +428,9 @@ class AABB():
             tmax = (self.max_x - camera_pos[0]) * inv_ray_dir_x
 
         if (tmin > tmax): tmin, tmax = swap_val(tmin, tmax)
-        print(f"tminx: {tmin}, tmaxx: {tmax}")
-        
+        # print(f"tminx: {tmin}, tmaxx: {tmax}")
+
+
         # if ray_dir[1] != 0:
         #     tmin_y = (self.min_y - camera_pos[1])/ ray_dir[1]
         #     tmax_y = (self.max_y - camera_pos[1])/ ray_dir[1]
@@ -409,7 +452,7 @@ class AABB():
         # tmax = np.max([tmax, tmax_y])
         if tmin_y > tmin: tmin = tmin_y
         if tmax_y < tmax: tmax = tmax_y
-        print(f"tmin: {tmin}, tmax: {tmax}")
+        # print(f"tmin: {tmin}, tmax: {tmax}")
 
 
 
@@ -432,72 +475,233 @@ class AABB():
         # tmax = np.max([tmax, tmax_z])
         if tmin_z > tmin: tmin = tmin_z
         if tmax_z < tmax: tmax = tmax_z
-        print(f"tmin: {tmin}, tmax: {tmax}")
+        # print(f"tmin: {tmin}, tmax: {tmax}")
 
         return tmin, tmax, if_intersect
     
-    def create_density_volume(self, grid_resolution):
-        H, W, D = [grid_resolution for _ in range(3)]
-        num_celss = H*W*D
-        volume_data = np.ones((H, W, D, 7))
-        # get_aabb()
+    def create_density_volume(self, thres_pos, min_density_val, max_density_val, high_density_val):
+        for i in range(self.H):
+            for k in range(self.W):
+                for j in range(self.D):
+                    # x = i/(self.H-1)*2.+(-1.)
+                    # y = k/(self.W-1)*2.+(-1.)
+                    # z = i/(self.D-1)*2.+(-1.)
 
-        thres = 0.65
-        minval, maxval = 0, 0.5
-        for i in range(H):
-            for k in range(W):
-                for j in range(D):
-                    # x = i/(H-1)*2.+(-1.)
-                    # y = k/(W-1)*2.+(-1.)
-                    # z = i/(D-1)*2.+(-1.)
-                    x = i/(H-1)*(self.max_x-self.min_x)+self.min_x#[0,1] --> #[0, self,max_x]
-                    y = k/(W-1)*(self.max_y-self.min_y)+self.min_y
-                    z = i/(D-1)*(self.max_z-self.min_z)+self.min_z
-                    # print(x,y,z)
-                    range_size = maxval - minval# https://stackoverflow.com/questions/59389241/how-to-generate-a-random-float-in-range-1-1-using-numpy-random-rand
-                    density = np.random.rand()*range_size + minval
-                    if 0 < x and x < thres:
-                        if 0 < y and y < thres:
-                            if 0 < z and z < thres:
-                                density = 0.95
-                    r, g, b = 1, 1, 1
-                    # print(volume_data[i][k][j].shape)
-                    # volume_data[i][k][j] = (x,y,z,density)
-                    volume_data[i][k][j][0] = x
-                    volume_data[i][k][j][1] = y
-                    volume_data[i][k][j][2] = z
-                    volume_data[i][k][j][3] = r
-                    volume_data[i][k][j][4] = g
-                    volume_data[i][k][j][5] = b
-                    volume_data[i][k][j][6] = density
-                    # print(f"x: {x}, y: {y}, z: {z}, density: {density}")
-        return volume_data
+                    # scaling: i is in [0, H-1] --> [0,1] --> #[0, self.max_x-self.min_x] --> #[self.min_x, slf.max_x]
+                    x = i/(self.H-1)*(self.max_x-self.min_x)+self.min_x
+                    y = k/(self.W-1)*(self.max_y-self.min_y)+self.min_y
+                    z = j/(self.D-1)*(self.max_z-self.min_z)+self.min_z
+                    # print("x,y,z: ", x,y,z)
+                    range_density_val = max_density_val - min_density_val# https://stackoverflow.com/questions/59389241/how-to-generate-a-random-float-in-range-1-1-using-numpy-random-rand
+                    density = np.random.rand()*range_density_val + min_density_val
+                    # if -thres_pos < x and x < thres_pos:
+                    #     if -thres_pos < y and y < thres_pos:
+                    #         if -thres_pos < z and z < thres_pos:
+                    #             print("high_density_val")
+                    #             density = high_density_val
 
-    def read_volume(self, point_pos, grid_resolution, volume_data):
+                    # print("self.min_x/2: ", self.min_x/2)
+                    # print("self.max_x/2: ", self.max_x/2)
+                    # print("self.min_z/2: ", self.min_z/2)
+                    # print("self.max_z/2: ", self.max_z/2)
+                    if self.pos_x_center - thres_pos <= x and x <= self.pos_x_center + thres_pos:
+                        if self.pos_y_center - thres_pos <= y and y <= self.pos_y_center + thres_pos:
+                            if self.pos_z_center - thres_pos <= z and z <= self.pos_z_center + thres_pos:
+                                logger.debug(f"high_density_val. because min: {self.pos_z_center - thres_pos} <= z: {z} <= max: {self.pos_z_center + thres_pos}")
+                                density = high_density_val
+
+                    # radius = x*x + y*y + z*z
+                    # print("radius: ", radius)
+                    # if radius < thres_pos:
+                    #     print("high_density_val")
+                    #     density = high_density_val
+                    # white
+                    r, g, b = 255, 255, 255
+
+                    # print(self.density_volume[i][k][j].shape)
+                    # self.density_volume[i][k][j] = (x,y,z,density)
+                    
+                    # 3d position
+                    self.density_volume[i][k][j][0] = x
+                    self.density_volume[i][k][j][1] = y
+                    self.density_volume[i][k][j][2] = z
+                    # rgb
+                    self.density_volume[i][k][j][3] = r
+                    self.density_volume[i][k][j][4] = g
+                    self.density_volume[i][k][j][5] = b
+                    # density
+                    self.density_volume[i][k][j][6] = density
+                    logger.debug(f"i: {i}, k: {k}, j: {j}")
+                    logger.debug(f"x: {x}, y: {y}, z: {z}, density: {density}")
+
+    def read_volume(self, point_pos):
+        # nearest neighbor search
         # https://www.scratchapixel.com/lessons/3d-basic-rendering/volume-rendering-for-developers/volume-rendering-voxel-grids.html
+        # https://github.com/Rintarooo/code/blob/7f5ea4b995026e9fd1fba127ebce059830e95584/volume-rendering-for-developers/raymarch-chap5.cpp#L247-L259
     #     float evalDensity(const Grid* grid, const Point& p)
     # {
-        gridSize = self.max_pos - self.min_pos
-        pLocal = (point_pos - self.min_pos) / gridSize
-        pVoxel = pLocal * grid_resolution
+        gridSize_xyz = self.max_pos - self.min_pos
+        pLocal = (point_pos - self.min_pos) / gridSize_xyz
+        pVoxel = pLocal * self.grid_resolution
         xi =int(np.floor(pVoxel[0]))
         yi =int(np.floor(pVoxel[1]))
         zi =int(np.floor(pVoxel[2]))
 
+        if (xi < 0) or (xi >= self.W): return 0
+        if (yi < 0) or (yi >= self.H): return 0
+        if (zi < 0) or (zi >= self.D): return 0
+
+
         ## nearest neighbor
         # grid_idx = (zi * grid->resolution + yi) * grid->resolution + xi
         # return grid->density[grid_idx]
-        density = volume_data[xi][yi][zi][6]
-        x = volume_data[xi][yi][zi][0]
-        y = volume_data[xi][yi][zi][1]
-        z = volume_data[xi][yi][zi][2]
-        # print("point_pos: ", point_pos)
-        # print(f"xi: {xi}, yi: {yi}, zi: {zi}, \nx: {x}, y: {y}, z: {z}, read density: {density}")
+        x = self.density_volume[xi][yi][zi][0]
+        y = self.density_volume[xi][yi][zi][1]
+        z = self.density_volume[xi][yi][zi][2]
+        density = self.density_volume[xi][yi][zi][6]
+        if point_pos[0] == 0 and point_pos[1]==0:
+            # logger.debug(f"\nxi: {xi}, yi: {yi}, zi: {zi}")
+            logger.debug(f"\npoint_pos: {point_pos}\nx: {x}, y: {y}, z: {z}\nread density: {density}")
         return density
     # }
 
+def sampling_light(light_pos, point_pos, delta, aabb):
+    # https://github.com/Rintarooo/Volume-Rendering-Tutorial/blob/f27c64f7909f368dc8205adcef2efa24b40e1e29/Tutorial1/src/VolumeRenderer.cpp#L145-L159
+    light_dir = point_pos - light_pos
+    light_distance = np.linalg.norm(light_dir)
+    light_dir = normalize(light_dir)
+    
+    density_sum = 0.
+    # print("light_distance: ", light_distance)
+    # print("delta: ", delta)
+    # print("iter_step: ", int(light_distance/delta))
+    # for light_step in range(0, int(np.floor(light_distance)), delta):
 
-def plotly_plot():
+    for light_step in range(int(light_distance/delta)):
+        lighting_point_pos = point_pos + light_step * light_dir
+        # print("point_pos: ", point_pos)
+        # print("lighting_point_pos: ", lighting_point_pos)
+        density_sum += aabb.read_volume(lighting_point_pos)
+    
+    T_i = np.exp(-density_sum * delta)
+    return T_i
+
+
+def render_image_from_volume(ray_dirs, w_, h_, num_point, aabb, camera_pos):
+    # point_pos = trace_sampling_point_lis[0][0]
+    # point_pos = np.array([trace_sampling_point_lis[0][0]["x"][0], trace_sampling_point_lis[0][0]["y"][0], trace_sampling_point_lis[0][0]["z"][0]])
+    # cur_density = aabb.read_volume(point_pos)
+    
+    """"
+    absorptionCoef, scatteringCoef = 0.1, 0.1
+    # 減衰係数(extinction coefficient) = 吸収係数(absorption coefficient)+散乱係数(scattering coefficient)
+    # https://qiita.com/Renard_Renard/items/fd706def17cb8d1e8ec4
+    # 減衰が発生し、その結果残る光の割合を透過率(transmittance)と呼ぶ
+    # T = e^(-tau)
+    # extinctionCoef = 0.1
+    extinctionCoef = absorptionCoef + scatteringCoef
+    """
+    # point_pos = np.array([trace_sampling_point_lis[0][0]["x"][0], trace_sampling_point_lis[0][0]["y"][0], trace_sampling_point_lis[0][0]["z"][0]])
+    # cur_density = aabb.read_volume(point_pos)
+
+    
+    light_pos = np.array([0,0,0])
+    # transmittance = 1
+    # for each ray    
+    channels = 3
+    render_img = np.zeros([w_, h_, channels])
+    # black
+    render_color = np.array([0,0,0])
+    
+    ## for density plot
+    # density_lis = []
+    density_plot_dic = {"density_lis":[], "tmin":0, "tmax":0, "ray_idx":0}
+    density_plot_index_ray = int(len(ray_dirs)/2)#5
+    density_plot_dic["ray_idx"] = density_plot_index_ray
+    assert density_plot_index_ray < len(ray_dirs), "ray index is over list ray_dirs"
+
+    # for ray_idx in range(len(ray_dirs)):
+    for px in range(w_):
+        idx_px = px * w_
+        for py in range(h_):
+            ray_idx = idx_px + py
+            assert ray_idx < len(ray_dirs), "ray index is over list ray_dirs"
+            # print("ray_idx: ", ray_idx)
+            ray_dir = ray_dirs[ray_idx]
+            tmin, tmax, if_intersect = aabb.ray_intersect_and_get_mint(ray_dir, camera_pos)
+            # print("if_intersect: ", if_intersect)
+            # print("tmin: ", tmin)
+            # print("tmax: ", tmax)
+            if not if_intersect:
+                tmin = 4.5
+                tmax = 9.5
+                # black
+                render_color = np.array([0,0,0])
+            assert tmin < tmax, "ray marching range"
+            delta = (tmax-tmin)/num_point
+
+            if if_intersect:
+                for i in range(num_point):
+                    # point_pos = np.array([camera_pos + (tmin + dt*t) * ray_dirs[ray_idx] for t in range(num_point)])
+                    point_pos = camera_pos + (tmin+delta*i) * ray_dir
+                    # print("point_pos: ", point_pos)
+                    cur_density = aabb.read_volume(point_pos)
+                    # print(f"ray_idx: {ray_idx}, density_plot_index_ray: {density_plot_index_ray}")
+                    if ray_idx == density_plot_index_ray:
+                        density_plot_dic["density_lis"].append(cur_density)
+                        if i == 0:
+                            density_plot_dic["tmin"] = tmin
+                            density_plot_dic["tmax"] = tmax
+                    # transmittance *= np.exp(-cur_density * extinctionCoef * delta)
+                    alpha_i = 1 - np.exp(-cur_density * delta)
+                    T_i = sampling_light(light_pos, point_pos, delta, aabb)
+                    # T_i = 1
+                    # print("transmittance: ", transmittance)
+
+                    # white, homogenious color
+                    color = np.array([255,255,255])
+                    weight_i = T_i*alpha_i
+                    render_color += np.uint8(weight_i*color)
+                
+            # print("np.uint8(render_color): ", np.uint8(render_color))
+            render_img[px][py] = np.uint8(render_color)
+
+    # plt.imsave("./render.png", render_img)
+    render_path , density_plot_path = "./out/render.png", "./out/density_plot.png"
+    plt.imsave(render_path, np.uint8(render_img))
+    logger.info(f"save render_path: {render_path}")
+
+    
+    logger.debug(f"density_lis: {density_plot_dic['density_lis']}")
+    plt.plot(np.linspace(density_plot_dic["tmin"], density_plot_dic["tmax"], len(density_plot_dic["density_lis"])), density_plot_dic["density_lis"], ".", markersize=8)
+    plt.xlabel(f"tmin:{density_plot_dic['tmin']} - tmax:{density_plot_dic['tmax']}")
+    plt.ylabel("density")
+    plt.ylim(0, 1)
+    plt.title(f"ray index: {density_plot_dic['ray_idx']}")
+    logger.info(f"save density_plot_path: {density_plot_path}")
+    plt.savefig(density_plot_path)
+    # plt.show()
+
+    #     u_, v_ = 1, 1
+    #     for i in range(num_point):
+    #         # transmittance *= np.exp(-cur_density * extinctionCoef * delta)
+    #         alpha_i = 1 - np.exp(-cur_density * delta)
+    #         T_i = sampling_light(light_pos, point_pos, delta, aabb, density_vol)
+    #         # print("transmittance: ", transmittance)
+
+    #         # white, homogenious color
+    #         color = np.array([255,255,255])
+    #         weight_i = T_i*alpha_i
+    #         render_color += weight_i*color
+        
+    #     render_img[u_][v_] = np.uint8(render_color)
+
+    # plt.imsave("./render.png", render_img)
+
+
+
+
+def plotly_plot(figshow = True):
     camera_pos = np.array([0, 0, 0])
     # camera_lookat = np.array([0, 0, -1])
     camera_lookat = np.array([0, 0, 1])
@@ -507,7 +711,7 @@ def plotly_plot():
     # camera_up = np.cross(camera_right, look_dir)
 
     fov = 45#90#150#45#20#85#10#20#80#45
-    width, height = 3,3#5,5#3, 3#1,1#5,5#3, 3
+    width, height = 64,64#3, 3#5,5#5,5#1,1#5,5
     camera, points, lines, dist_camera2plane = get_camera(fov, width, height)
 
     ray_dirs = raycast(width, height, dist_camera2plane, look_dir, camera_right, camera_up, camera_pos)
@@ -523,13 +727,14 @@ def plotly_plot():
     trace_screen = get_trace_screen(camera, lines)
   
     pos_cube_center = (0,0,9)#(0,0,7)#(0,0,-3)
-    mint, maxt = -3.0, 3.0#-1.0, 1.0#-0.5, 0.5
+    mint, maxt = -2.0, 2.0#-3.0, 3.0#-1.0, 1.0#-0.5, 0.5
     rgba = 'rgba(0,0,0,0.2)'
     trace_cube =get_trace_cube(pos_cube_center, mint, maxt, rgba)
     # aabb_min, aabb_max = -1, 1
     # aabb = AABB(aabb_min, aabb_max)
-    aabb = AABB(pos_cube_center, mint, maxt)
-    ray_index_lis = [0, 4, 8]
+    grid_resolution = 15
+    aabb = AABB(pos_cube_center, mint, maxt, grid_resolution)
+    ray_index_lis = [0, int(len(ray_dirs)/4), int(len(ray_dirs)/2), int(len(ray_dirs)*3/4), int(len(ray_dirs))-1]#[0,4,8]
     # ray cast
     min_t = 4.5#3.5
     max_t = 9.5#4.5
@@ -537,7 +742,7 @@ def plotly_plot():
     trace_ray_lis = []
     trace_sampling_point_lis = []
 
-    num_point = 10
+    num_point = 15
     for ray_idx in ray_index_lis:
         assert ray_idx <= len(ray_dirs), "ray index should lower than ray number"
         ray_dir = ray_dirs[ray_idx]
@@ -560,11 +765,13 @@ def plotly_plot():
         trace_ray_lis.append(trace_ray)
         trace_sampling_point_lis.append(trace_sampling_point)
 
-    grid_resolution =3
-    density_vol = aabb.create_density_volume(grid_resolution)
-    # point_pos = trace_sampling_point_lis[0][0]
-    point_pos = np.array([trace_sampling_point_lis[0][0]["x"][0], trace_sampling_point_lis[0][0]["y"][0], trace_sampling_point_lis[0][0]["z"][0]])
-    density = aabb.read_volume(point_pos, grid_resolution, density_vol)
+    thres_pos = 1.0#0.5#0.65
+    assert thres_pos > 0, "thres_pos should be positive"
+    high_density_val = 0.95
+    min_density_val, max_density_val = 0, 0.2
+    aabb.create_density_volume(thres_pos, min_density_val, max_density_val, high_density_val)
+    
+    render_image_from_volume(ray_dirs, width, height, num_point, aabb, camera_pos)
 
 
     # data = go.Data([trace1, trace2, trace3, trace4, trace5, trace6])
@@ -579,9 +786,12 @@ def plotly_plot():
     # fig.update_layout(scene=dict(aspectratio=dict(x=1, y=1, z=1),
     #                              camera_eye=dict(x=1.2, y=1.2, z=0.6)))
 
-    fig.show()
+    if figshow:
+        fig.show()
 
 if __name__=="__main__":
     # https://jun-networks.hatenablog.com/entry/2021/04/02/043216
-    plotly_plot()
+
+    figshow = True
+    plotly_plot(figshow)
 
