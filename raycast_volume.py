@@ -3,6 +3,7 @@ import plotly.graph_objs as go
 import matplotlib.pyplot as plt
 import logging
 import os
+from typing import Any
 
 from pyramidify import CameraPlotter, CameraMover
 
@@ -30,7 +31,7 @@ filehandler.setFormatter(formatter)
 # logger.addHandler(streamhandler)
 logger.addHandler(filehandler)
 
-logger.setLevel(logging.DEBUG)  # DEBUG #INFO #WARNING
+logger.setLevel(logging.INFO)  # DEBUG #INFO #WARNING
 
 logger.info("Logger INFO mode Start!")
 logger.debug("Logger DEBUG mode Start!")
@@ -62,12 +63,12 @@ def get_camera(fov, width, height, visualize_scale = 0.5):
     # points = [[ 0,  1., 1., -1., -1.], # pyramid verticies # towards -z
     #           [ 0,  1., -1., -1., 1.],
     #           [ 0,  -1., -1., -1., -1.]]    # points = [[ 0,  1.,1.,-1.,-1.], # pyramid verticies # towards -z
-    # points = [[ 0,  1., 1., -1., -1.], # pyramid verticies # towards z
-    #           [ 0,  1., -1., -1., 1.],
-    #           [ 0,  1., 1., 1., 1.]] 
-    points = [[ 0,  width/2,  width/2, -width/2, -width/2], # pyramid verticies # towards -z
-            [ 0,  height/2, -height/2, -height/2, height/2],
-            [ 0,  1.,  1.,  1.,  1.]] 
+    points = [[ 0,  1., 1., -1., -1.], # pyramid verticies # towards z
+              [ 0,  1., -1., -1., 1.],
+              [ 0,  1., 1., 1., 1.]] 
+    # points = [[ 0,  width/2,  width/2, -width/2, -width/2], # pyramid verticies # towards -z
+    #         [ 0,  height/2, -height/2, -height/2, height/2],
+    #         [ 0,  1.,  1.,  1.,  1.]] 
     lines = [[1, 2], [2, 3], [3, 4], [4, 1], # pyramid lines
             [0, 1], [0, 2], [0, 3], [0, 4]]
     # camera_size = 0.4
@@ -118,7 +119,8 @@ def raycast(w_, h_, dist_camera2plane, look_dir, camera_right, camera_up, camera
             v_ = (py + .5) - cy
             # u_ = (px + .5*dw) - cx
             # v_ = (py + .5*dh) - cy
-            # print("u_, v_: ", u_, v_)
+
+            # logger.debug(f"u_: {u_}, v_: {v_}")
             
             # ray_dir = look_dir * dist_camera2plane + u_ * camera_right + v_ * camera_up
             # ray_dir = np.array([u_ / dist_camera2plane, v_ / dist_camera2plane, -1.])
@@ -259,16 +261,10 @@ def get_trace_ray(camera_pos, ray_dir_0, name):
     return trace_ray
 
 def get_trace_sampling_point(ray_dir_0_sample):
-    # print(ray_dir_0_sample[0,:])
-    # print(ray_dir_0_sample)
-    # print(ray_dir_0_sample[:,0])
     trace1 = {
         "name": "sampling_point", 
         "type": "scatter3d", 
-        # "x": [ray_dir_0_sample[0]], # 矢印の始点のx座標
-        # "y": [ray_dir_0_sample[1]], 
-        # "z": [ray_dir_0_sample[2]], 
-        "x": ray_dir_0_sample[:,0], # 矢印の始点のx座標
+        "x": ray_dir_0_sample[:,0], # 点のx座標
         "y": ray_dir_0_sample[:,1], 
         "z": ray_dir_0_sample[:,2], 
         # "sizeref": 0.1, 
@@ -289,13 +285,16 @@ def get_trace_sampling_point(ray_dir_0_sample):
     trace_sampling_point = [trace1]
     return trace_sampling_point
 
-def get_trace_screen(camera, lines):
+def get_trace_screen(camera, lines, camera_pos):
     color='blue'
     name='camera-plane'
     # square draw
     trace_screen_lines = []
     for i, j in lines:
         x, y, z = [[axis[i], axis[j]] for axis in camera]
+        # logger.debug(f"lines: [{x},{y},{z}]")
+        # x, y, z = [[x, y, z][i] + camera_pos[i] for i in range(3)]
+        # logger.debug(f"lines + camera_pos: [{x},{y},{z}]")
         trace = go.Scatter3d(x=x, y=y, z=z, mode='lines', line_width=2, line_color=color, name=name)
         trace_screen_lines.append(trace)
         # fig.add_trace(trace)
@@ -355,8 +354,9 @@ def get_trace_cube(pos_cube, mint, maxt, rgba):
         np.linspace(mint+pos_y, maxt+pos_y, 2), 
         np.linspace(mint+pos_z, maxt+pos_z, 2),
     )
-    # print(x)
+    # logger.debug(f"plotly cube x: {x}")
     x = x.flatten()
+    # logger.debug(f"plotly cube x flatten: {x}")
     y = y.flatten()
     z = z.flatten()
     
@@ -479,46 +479,47 @@ class AABB():
 
         return tmin, tmax, if_intersect
     
-    def create_density_volume(self, thres_pos, min_density_val, max_density_val, high_density_val):
+    def create_density_volume(self, thres_pos, min_density_val, max_density_val, high_density_val, density_mode):
+        density = min_density_val
         for i in range(self.H):
             for k in range(self.W):
                 for j in range(self.D):
+                    # scaling: i is in [0, H-1] --> [0, 1] --> #[0, 2.] --> #[-1., 1.]
                     # x = i/(self.H-1)*2.+(-1.)
                     # y = k/(self.W-1)*2.+(-1.)
                     # z = i/(self.D-1)*2.+(-1.)
 
-                    # scaling: i is in [0, H-1] --> [0,1] --> #[0, self.max_x-self.min_x] --> #[self.min_x, slf.max_x]
+                    # scaling: i is in [0, H-1] --> [0, 1] --> #[0, self.max_x-self.min_x] --> #[self.min_x, slf.max_x]
                     x = i/(self.H-1)*(self.max_x-self.min_x)+self.min_x
                     y = k/(self.W-1)*(self.max_y-self.min_y)+self.min_y
                     z = j/(self.D-1)*(self.max_z-self.min_z)+self.min_z
-                    # print("x,y,z: ", x,y,z)
-                    range_density_val = max_density_val - min_density_val# https://stackoverflow.com/questions/59389241/how-to-generate-a-random-float-in-range-1-1-using-numpy-random-rand
-                    density = np.random.rand()*range_density_val + min_density_val
-                    # if -thres_pos < x and x < thres_pos:
-                    #     if -thres_pos < y and y < thres_pos:
-                    #         if -thres_pos < z and z < thres_pos:
-                    #             print("high_density_val")
-                    #             density = high_density_val
+                    density = 0.
 
-                    # print("self.min_x/2: ", self.min_x/2)
-                    # print("self.max_x/2: ", self.max_x/2)
-                    # print("self.min_z/2: ", self.min_z/2)
-                    # print("self.max_z/2: ", self.max_z/2)
-                    if self.pos_x_center - thres_pos <= x and x <= self.pos_x_center + thres_pos:
-                        if self.pos_y_center - thres_pos <= y and y <= self.pos_y_center + thres_pos:
-                            if self.pos_z_center - thres_pos <= z and z <= self.pos_z_center + thres_pos:
-                                logger.debug(f"high_density_val. because min: {self.pos_z_center - thres_pos} <= z: {z} <= max: {self.pos_z_center + thres_pos}")
+                    if density_mode == "sphere":
+                        # https://github.com/Rintarooo/Volume-Rendering-Tutorial/blob/f27c64f7909f368dc8205adcef2efa24b40e1e29/Tutorial1/src/main.cpp#L17-L21
+                        radius_x = abs(x - self.pos_x_center)
+                        radius_y = abs(y - self.pos_y_center)
+                        radius_z = abs(z - self.pos_z_center)
+
+                        # Fill the grid with a solid sphere with a very dense inner sphere
+                        sphere_radius = radius_x * radius_x + radius_y * radius_y + radius_z * radius_z
+                        if sphere_radius < 1.:
+                            density = 1.0#sphere_radius
+                            if sphere_radius < 0.25:
                                 density = high_density_val
+                    elif density_mode == "cube":
+                        # range_density_val = max_density_val - min_density_val# https://stackoverflow.com/questions/59389241/how-to-generate-a-random-float-in-range-1-1-using-numpy-random-rand
+                        # density = np.random.rand()*range_density_val + min_density_val
+                        density = min_density_val
+                        if self.pos_x_center - thres_pos <= x and x <= self.pos_x_center + thres_pos:
+                            if self.pos_y_center - thres_pos <= y and y <= self.pos_y_center + thres_pos:
+                                if self.pos_z_center - thres_pos <= z and z <= self.pos_z_center + thres_pos:
+                                    # logger.debug(f"high_density_val. because x, y and z is in range min z: {self.pos_z_center - thres_pos} <= z: {z} <= max z: {self.pos_z_center + thres_pos}")
+                                    density = high_density_val
 
-                    # radius = x*x + y*y + z*z
-                    # print("radius: ", radius)
-                    # if radius < thres_pos:
-                    #     print("high_density_val")
-                    #     density = high_density_val
                     # white
                     r, g, b = 255, 255, 255
 
-                    # print(self.density_volume[i][k][j].shape)
                     # self.density_volume[i][k][j] = (x,y,z,density)
                     
                     # 3d position
@@ -531,8 +532,8 @@ class AABB():
                     self.density_volume[i][k][j][5] = b
                     # density
                     self.density_volume[i][k][j][6] = density
-                    logger.debug(f"i: {i}, k: {k}, j: {j}")
-                    logger.debug(f"x: {x}, y: {y}, z: {z}, density: {density}")
+                    # logger.debug(f"i: {i}, k: {k}, j: {j}")
+                    # logger.debug(f"cell pos, x: {x}, y: {y}, z: {z}, density: {density}")
 
     def read_volume(self, point_pos):
         # nearest neighbor search
@@ -543,10 +544,13 @@ class AABB():
         gridSize_xyz = self.max_pos - self.min_pos
         pLocal = (point_pos - self.min_pos) / gridSize_xyz
         pVoxel = pLocal * self.grid_resolution
+
+        # relative index
         xi =int(np.floor(pVoxel[0]))
         yi =int(np.floor(pVoxel[1]))
         zi =int(np.floor(pVoxel[2]))
 
+        # If outside the grid, then return density zero
         if (xi < 0) or (xi >= self.W): return 0
         if (yi < 0) or (yi >= self.H): return 0
         if (zi < 0) or (zi >= self.D): return 0
@@ -559,9 +563,9 @@ class AABB():
         y = self.density_volume[xi][yi][zi][1]
         z = self.density_volume[xi][yi][zi][2]
         density = self.density_volume[xi][yi][zi][6]
-        if point_pos[0] == 0 and point_pos[1]==0:
+        # if point_pos[0] == 0 and point_pos[1]==0:
             # logger.debug(f"\nxi: {xi}, yi: {yi}, zi: {zi}")
-            logger.debug(f"\npoint_pos: {point_pos}\nx: {x}, y: {y}, z: {z}\nread density: {density}")
+        logger.debug(f"\nray point_pos: {point_pos}\ncell pos: [{x}, {y}, {z}]\nread density: {density}")
         return density
     # }
 
@@ -572,22 +576,35 @@ def sampling_light(light_pos, point_pos, delta, aabb):
     light_dir = normalize(light_dir)
     
     density_sum = 0.
-    # print("light_distance: ", light_distance)
-    # print("delta: ", delta)
-    # print("iter_step: ", int(light_distance/delta))
+    logger.debug(f"light_distance: {light_distance}, delta: {delta}, iter_step: {int(light_distance/delta)}")
+    
+    # tmin, tmax, if_intersect = aabb.ray_intersect_and_get_mint(light_dir, point_pos)
+    # if not if_intersect:
+    #     # no density on the ray. return transmittance 1.0 (background color rendered)
+    #     return 1.
+    
+    # if if_intersect:
     # for light_step in range(0, int(np.floor(light_distance)), delta):
-
     for light_step in range(int(light_distance/delta)):
         lighting_point_pos = point_pos + light_step * light_dir
-        # print("point_pos: ", point_pos)
-        # print("lighting_point_pos: ", lighting_point_pos)
+        logger.debug(f"point_pos: {point_pos}, lighting_point_pos: {lighting_point_pos}")
         density_sum += aabb.read_volume(lighting_point_pos)
     
     T_i = np.exp(-density_sum * delta)
     return T_i
 
 
-def render_image_from_volume(ray_dirs, w_, h_, num_point, aabb, camera_pos):
+# def render_image_from_volume(ray_dirs, w_, h_, num_point, aabb, camera_pos):
+def render_image_from_volume(
+    ray_dirs: Any,
+    w_: Any,
+    h_: Any,
+    num_point: Any,
+    aabb: Any,
+    camera_pos: Any,
+    light_pos: Any,
+) -> None:
+
     # point_pos = trace_sampling_point_lis[0][0]
     # point_pos = np.array([trace_sampling_point_lis[0][0]["x"][0], trace_sampling_point_lis[0][0]["y"][0], trace_sampling_point_lis[0][0]["z"][0]])
     # cur_density = aabb.read_volume(point_pos)
@@ -605,48 +622,48 @@ def render_image_from_volume(ray_dirs, w_, h_, num_point, aabb, camera_pos):
     # cur_density = aabb.read_volume(point_pos)
 
     
-    light_pos = np.array([0,0,0])
-    # transmittance = 1
     # for each ray    
     channels = 3
     render_img = np.zeros([w_, h_, channels])
-    # black
-    render_color = np.array([0,0,0])
     
     ## for density plot
-    # density_lis = []
     density_plot_dic = {"density_lis":[], "tmin":0, "tmax":0, "ray_idx":0}
     density_plot_index_ray = int(len(ray_dirs)/2)#5
     density_plot_dic["ray_idx"] = density_plot_index_ray
     assert density_plot_index_ray < len(ray_dirs), "ray index is over list ray_dirs"
 
     # for ray_idx in range(len(ray_dirs)):
+    cnt_intersect = 0
     for px in range(w_):
         idx_px = px * w_
         for py in range(h_):
+            # black
+            # render_color = np.array([0,0,0])
+            # background_color = np.array([0,0,0])
+            render_color = np.array([0.,0.,0.])
+            ## light blue
+            background_color = np.array([157.,204.,224.])
+            ## transmittance, initialize transmission to 1 (fully transparent, so background color is rendered)
+            T_ = 1. 
             ray_idx = idx_px + py
             assert ray_idx < len(ray_dirs), "ray index is over list ray_dirs"
-            # print("ray_idx: ", ray_idx)
             ray_dir = ray_dirs[ray_idx]
             tmin, tmax, if_intersect = aabb.ray_intersect_and_get_mint(ray_dir, camera_pos)
-            # print("if_intersect: ", if_intersect)
-            # print("tmin: ", tmin)
-            # print("tmax: ", tmax)
             if not if_intersect:
                 tmin = 4.5
                 tmax = 9.5
-                # black
-                render_color = np.array([0,0,0])
+                # black if it does not intersect
+                # render_color = np.array([0,0,0])
+                render_color = background_color
             assert tmin < tmax, "ray marching range"
             delta = (tmax-tmin)/num_point
 
             if if_intersect:
+                cnt_intersect += 1
                 for i in range(num_point):
                     # point_pos = np.array([camera_pos + (tmin + dt*t) * ray_dirs[ray_idx] for t in range(num_point)])
                     point_pos = camera_pos + (tmin+delta*i) * ray_dir
-                    # print("point_pos: ", point_pos)
                     cur_density = aabb.read_volume(point_pos)
-                    # print(f"ray_idx: {ray_idx}, density_plot_index_ray: {density_plot_index_ray}")
                     if ray_idx == density_plot_index_ray:
                         density_plot_dic["density_lis"].append(cur_density)
                         if i == 0:
@@ -654,23 +671,37 @@ def render_image_from_volume(ray_dirs, w_, h_, num_point, aabb, camera_pos):
                             density_plot_dic["tmax"] = tmax
                     # transmittance *= np.exp(-cur_density * extinctionCoef * delta)
                     alpha_i = 1 - np.exp(-cur_density * delta)
-                    T_i = sampling_light(light_pos, point_pos, delta, aabb)
-                    # T_i = 1
-                    # print("transmittance: ", transmittance)
+                    T_ *= np.exp(-cur_density * delta)
+                    
 
-                    # white, homogenious color
-                    color = np.array([255,255,255])
-                    weight_i = T_i*alpha_i
-                    render_color += np.uint8(weight_i*color)
+                    # T_i is the product of 1. - alpha
+                    # T_i = sampling_light(light_pos, point_pos, delta, aabb)
+                    # T_i = 1.
+
+                    # white, volume cell has homogenious color
+                    color = np.array([255,255,255])#np.array([0,0,255])
+
+                    # light emission
+                    # weight_i = T_i*alpha_i
+                    weight_i = T_*alpha_i
+
+                    logger.debug(f"ray_idx: {ray_idx}, weight_i: {weight_i}, delta: {delta}, ray step: {i}, point_pos: {point_pos}, cur_density: {cur_density}")
+                    # render_color += np.uint8(weight_i*color)
+                    render_color += weight_i*color
                 
-            # print("np.uint8(render_color): ", np.uint8(render_color))
-            render_img[px][py] = np.uint8(render_color)
+            # logger.debug(f"ray_idx: {ray_idx}, px: {px}, py: {py}, np.uint8(render_color): {np.uint8(render_color)}")
+            # logger.debug(f"img_x: {w_-px-1}, img_y: {h_-py-1}")
+            # render_img[py][px] = np.uint8(render_color)
+            logger.debug(f"transmittance: {T_}, background_color: {background_color}, render_color: {render_color}")
+            render_color =  T_ * background_color + (1.0-T_) * render_color
+            render_img[w_-px-1][h_-py-1] = np.uint8(render_color)
+            
 
     # plt.imsave("./render.png", render_img)
     render_path , density_plot_path = "./out/render.png", "./out/density_plot.png"
     plt.imsave(render_path, np.uint8(render_img))
     logger.info(f"save render_path: {render_path}")
-
+    logger.debug(f"cnt_intersect: {cnt_intersect}/{len(ray_dirs)}")
     
     logger.debug(f"density_lis: {density_plot_dic['density_lis']}")
     plt.plot(np.linspace(density_plot_dic["tmin"], density_plot_dic["tmax"], len(density_plot_dic["density_lis"])), density_plot_dic["density_lis"], ".", markersize=8)
@@ -702,16 +733,15 @@ def render_image_from_volume(ray_dirs, w_, h_, num_point, aabb, camera_pos):
 
 
 def plotly_plot(figshow = True):
-    camera_pos = np.array([0, 0, 0])
-    # camera_lookat = np.array([0, 0, -1])
-    camera_lookat = np.array([0, 0, 1])
+    camera_pos = np.array([0, 0, 0])#([1.45, 1.1, 3.1])#([-1, 1, 0])
+    camera_lookat = np.array([0, 0, 1])#([0, 0, 0])#([0, 0, -1])
     camera_up = np.array([0, 1, 0])
     look_dir = normalize(camera_lookat - camera_pos)# look direction
     camera_right = np.cross(look_dir, camera_up)
     # camera_up = np.cross(camera_right, look_dir)
 
-    fov = 45#90#150#45#20#85#10#20#80#45
-    width, height = 64,64#3, 3#5,5#5,5#1,1#5,5
+    fov = 45#90#150#20#85#10#80
+    width, height = 32, 32#256,256#64,64#3, 3#128, 128#1,1#5,5
     camera, points, lines, dist_camera2plane = get_camera(fov, width, height)
 
     ray_dirs = raycast(width, height, dist_camera2plane, look_dir, camera_right, camera_up, camera_pos)
@@ -721,70 +751,87 @@ def plotly_plot(figshow = True):
     #                 [0, 0, 1, 0],
     #                 [0, 0, 0, 1]], dtype=float)
 
-    # print(ray_dirs)
     
     trace_camera = get_trace_camera(camera_pos, camera_up, camera_right, camera_lookat)
-    trace_screen = get_trace_screen(camera, lines)
+    trace_screen = get_trace_screen(camera, lines, camera_pos)
   
     pos_cube_center = (0,0,9)#(0,0,7)#(0,0,-3)
     mint, maxt = -2.0, 2.0#-3.0, 3.0#-1.0, 1.0#-0.5, 0.5
     rgba = 'rgba(0,0,0,0.2)'
-    trace_cube =get_trace_cube(pos_cube_center, mint, maxt, rgba)
-    # aabb_min, aabb_max = -1, 1
-    # aabb = AABB(aabb_min, aabb_max)
-    grid_resolution = 15
+    trace_cube = get_trace_cube(pos_cube_center, mint, maxt, rgba)
+    grid_resolution = 16#128#30
     aabb = AABB(pos_cube_center, mint, maxt, grid_resolution)
-    ray_index_lis = [0, int(len(ray_dirs)/4), int(len(ray_dirs)/2), int(len(ray_dirs)*3/4), int(len(ray_dirs))-1]#[0,4,8]
+    ray_idx_plot_lis = [0, int(len(ray_dirs)/2), int(len(ray_dirs))-1]#[0, int(len(ray_dirs)/4), int(len(ray_dirs)/2), int(len(ray_dirs)*3/4), int(len(ray_dirs))-1]#[0,4,8]
+
     # ray cast
-    min_t = 4.5#3.5
-    max_t = 9.5#4.5
-    assert min_t < max_t, "ray marching range"
+    tmin_0 = 4.5#3.5
+    tmax_0 = 9.5#4.5
+    tmin = tmin_0
+    tmax = tmax_0
+    assert tmin < tmax, "ray marching range"
     trace_ray_lis = []
     trace_sampling_point_lis = []
 
-    num_point = 15
-    for ray_idx in ray_index_lis:
-        assert ray_idx <= len(ray_dirs), "ray index should lower than ray number"
+    num_point = 5#128#30#10
+    for ray_idx in ray_idx_plot_lis:
+        assert ray_idx <= len(ray_dirs), "ray index should be lower than ray number (render img resolution: H x W)"
         ray_dir = ray_dirs[ray_idx]
         tmin, tmax, if_intersect = aabb.ray_intersect_and_get_mint(ray_dir, camera_pos)
-        # print("if_intersect: ", if_intersect)
-        # print("tmin: ", tmin)
-        # print("tmax: ", tmax)
         if not if_intersect:
-            tmin = 4.5
-            tmax = 9.5
-        assert min_t < max_t, "ray marching range"
-        dt = (tmax-tmin)/num_point
-        # r(t) = o + td
-        sampling_point = np.array([camera_pos + (tmin + dt*t) * ray_dirs[ray_idx] for t in range(num_point)])
-        ray_max = camera_pos + (max_t+3.0) * ray_dir
-
+            tmin = tmin_0
+            tmax = tmax_0
+        assert tmin < tmax, "ray marching range"
+        ray_max = camera_pos + (tmax+3.0) * ray_dir
         # for plotly
         trace_ray = get_trace_ray(camera_pos, ray_max, "ray_dir_"+str(ray_idx))
-        trace_sampling_point = get_trace_sampling_point(sampling_point)
         trace_ray_lis.append(trace_ray)
-        trace_sampling_point_lis.append(trace_sampling_point)
+        if if_intersect:
+            dt = (tmax-tmin)/num_point
+            # r(t) = o + td = o + (tmin+dt*i)d
+            sampling_point = np.array([camera_pos + (tmin + dt*i) * ray_dirs[ray_idx] for i in range(num_point)])
+            trace_sampling_point = get_trace_sampling_point(sampling_point)
+            trace_sampling_point_lis.append(trace_sampling_point)
 
-    thres_pos = 1.0#0.5#0.65
+    thres_pos = 0.8#1.0#0.5#0.65
     assert thres_pos > 0, "thres_pos should be positive"
     high_density_val = 0.95
-    min_density_val, max_density_val = 0, 0.2
-    aabb.create_density_volume(thres_pos, min_density_val, max_density_val, high_density_val)
+    min_density_val, max_density_val = 0.2, 0.95#0.1, 0.2
+    density_mode_lis = ["sphere", "cube"]
+    density_mode = density_mode_lis[1]
+    aabb.create_density_volume(thres_pos, min_density_val, max_density_val, high_density_val, density_mode)
     
-    render_image_from_volume(ray_dirs, width, height, num_point, aabb, camera_pos)
+
+    light_pos = camera_pos#np.array([0,4,9])#np.array([0,0,0])#np.array([0,10,0])
+    render_image_from_volume(ray_dirs, width, height, num_point, aabb, camera_pos, light_pos)
 
 
     # data = go.Data([trace1, trace2, trace3, trace4, trace5, trace6])
     # data = trace_camera + trace_ray + trace_sampling_point + trace_screen + trace_cube + trace_ray_1 + trace_sampling_point_1 + trace_ray_2 + trace_sampling_point_2
     data = trace_camera + trace_screen + trace_cube# + trace_ray_lis + trace_sampling_point_lis
-    for k in range(len(trace_ray_lis)):
-        data += trace_ray_lis[k] + trace_sampling_point_lis[k]
+    for i in range(len(trace_ray_lis)):
+        data += trace_ray_lis[i]
+    for j in range(len(trace_sampling_point_lis)):
+        data += trace_sampling_point_lis[j]
     # fig = Figure(data=data, layout=layout)
     fig = go.Figure(data=data)
     # fig.add_trace(mesh)
     fig.update_layout(showlegend=False)
     # fig.update_layout(scene=dict(aspectratio=dict(x=1, y=1, z=1),
     #                              camera_eye=dict(x=1.2, y=1.2, z=0.6)))
+    
+    plot_range = 15
+    fig.update_layout(
+        scene =dict(
+            xaxis = dict(range=(-plot_range, plot_range)),
+            yaxis = dict(range=(-plot_range, plot_range)),
+            zaxis = dict(range=(-plot_range, plot_range)),
+    ))
+    fig.update_layout(
+        scene=dict(
+            aspectmode='cube'
+        )
+    )
+
 
     if figshow:
         fig.show()
